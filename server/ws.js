@@ -33,7 +33,7 @@ wsServer.on('connection', function (ws) {
                         message: response
                     }));
                 } else if (message.app === 'weather') {
-                    const response = await handleWeatherRequest(message.type);
+                    const response = await handleWeatherRequest(message.type, message.message);
                     ws.send(JSON.stringify({
                         app: 'weather',
                         type: message.type,

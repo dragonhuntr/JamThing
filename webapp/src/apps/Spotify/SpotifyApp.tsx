@@ -7,7 +7,7 @@ import { ProgressBar } from './components/ProgressBar';
 import { Jam } from './components/Jam';
 import { VolumeBar } from './components/VolumeBar';
 import { findAlbumArtColor } from './utils/colorBg';
-import SpotifyHandler from './server/spotify'; // Import SpotifyHandler
+import SpotifyHandler from './server/spotify';
 import ButtonControl from '../../utils/buttonHelper';
 
 function SpotifyApp() {

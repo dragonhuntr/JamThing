@@ -3,8 +3,11 @@ const crypto = require('crypto');
 const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
+require('dotenv').config();
 
 const android_client_id = '9a8d2f0ce77a4e248bb71fefcb557637';
+
+var accessToken = '';
 
 async function fetchSpotifyAuth() {
     try {

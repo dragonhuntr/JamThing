@@ -1,24 +1,3 @@
-import { Sun, Cloud, CloudRain } from '../components/Icons';
-
-interface ForecastData {
-    time: string;
-    Icon: typeof Sun;
-    temperature: string;
-    iconColor: string;
-}
-
-interface WeatherDetailsData {
-    feelsLike: string;
-    humidity: string;
-    windSpeed: string;
-}
-
-interface CurrentWeatherData {
-    location: string;
-    temperature: string;
-    condition: string;
-    Icon: typeof Sun;
-}
 
 class WeatherHandler {
     private ws: WebSocket;
@@ -110,32 +89,14 @@ class WeatherHandler {
         this.callbacks[type].push(callback);
     }
 
-    async getForecastData(): Promise<ForecastData[]> {
+    async getForecastData(): Promise<any[]> {
         return new Promise((resolve) => {
-            this.addCallback('getForecastData', (data: ForecastData[]) => {
-                resolve(data);
+            this.addCallback('getForecastData', (weatherData: any) => {
+                resolve(weatherData.forecast);
             });
             this.sendMessage('getForecastData');
         });
     }
-
-    async getWeatherDetails(): Promise<WeatherDetailsData> {
-        return new Promise((resolve) => {
-            this.addCallback('getWeatherDetails', (data: WeatherDetailsData) => {
-                resolve(data);
-            });
-            this.sendMessage('getWeatherDetails');
-        });
     }
-
-    async getCurrentWeather(): Promise<CurrentWeatherData> {
-        return new Promise((resolve) => {
-            this.addCallback('getCurrentWeather', (data: CurrentWeatherData) => {
-                resolve(data);
-            });
-            this.sendMessage('getCurrentWeather');
-        });
-    }
-}
 
 export default WeatherHandler;

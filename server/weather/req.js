@@ -1,10 +1,14 @@
 const axios = require('axios');
 
 async function makeWeatherRequest() {
-    const url = 'https://api.weather.gov/gridpoints/CLE/139,99/forecast';
+    const url = `https://api.weather.gov/gridpoints/CLE/139,99/forecast/hourly`;
 
     try {
-        const response = await axios.get(url);
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'JamThing (https://github.com/dragonhuntr/JamThing)'
+            }
+        });
         return response.data;
     } catch (error) {
         console.error('Error in makeWeatherRequest:', error);
@@ -12,25 +16,26 @@ async function makeWeatherRequest() {
     }
 }
 
-async function handleWeatherRequest(type) {
+async function handleWeatherRequest(type, message) {
     switch (type) {
-        case 'getForecast':
-            return await getForecast();
+        case 'getForecastData':
+            return await getForecast(message);
         default:
             return { error: 'Unknown request type' };
     }
 }
 
-async function getForecast() {
+async function getForecast(units) {
     try {
-        const data = await makeWeatherRequest();
+        const data = await makeWeatherRequest(units);
         const forecast = data.properties.periods.map(period => ({
-            name: period.name,
+            startTime: period.startTime,
             temperature: period.temperature,
             temperatureUnit: period.temperatureUnit,
+            windSpeed: period.windSpeed,
+            probabilityOfPrecipitation: period.probabilityOfPrecipitation.value,
+            relativeHumidity: period.relativeHumidity.value,
             shortForecast: period.shortForecast,
-            detailedForecast: period.detailedForecast,
-            icon: period.icon
         }));
         return { success: true, forecast };
     } catch (error) {

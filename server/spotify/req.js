@@ -90,7 +90,6 @@ async function handleSpotifyRequest(type, message) {
 }
 
 async function getCurrentPlayback() {
-    console.log('GETTING CURRENT PLAYBACK')
     const url = 'https://api.spotify.com/v1/me/player';
     try {
         let data = await makeSpotifyRequest('get', url);
