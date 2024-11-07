@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+
+red=$(tput setaf 1)
+gold=$(tput setaf 3)
+blue=$(tput setaf 4)
+magenta=$(tput setaf 5)
+cyan=$(tput setaf 6)
+default=$(tput sgr0)
+
+ATTACHED=$(./platform-tools/adb devices -l | grep 'spotify-car-thing')
+
+remote_superbird_path=/usr/share/qt-superbird-app
+remote_webapp_path=$remote_superbird_path/webapp
+local_webapp_path=./webapp/dist/*
+
+function mount() {
+  ./platform-tools/adb shell mount -o remount,rw /
+}
+
+function shell() {
+  ./platform-tools/adb shell
+}
+
+function openPort() {
+  echo "${gold}Opening port 8891...${default}"
+  ./platform-tools/adb reverse tcp:8891 tcp:8891
+}
+
+function openDevPort() {
+  echo "${gold}Opening port 2222...${default}"
+  ./platform-tools/adb reverse tcp:2222 tcp:2222
+}
+
+function reboot() {
+  echo "${gold}Rebooting device...${default}"
+  ./platform-tools/adb shell reboot
+}
+
+function restart_chromium() {
+  echo "${gold}Restarting Chromium...${default}"
+  ./platform-tools/adb shell supervisorctl restart chromium
+}
+
+function backup_local() {
+  if [ ! -d "./backup" ]; then
+    mkdir ./backup
+  fi
+  TS=$(date +"%Y%m%d%H%M%S")
+  ./platform-tools/adb pull $remote_webapp_path ./backup/$TS/
+}
+
+function pull() {
+  ./platform-tools/adb pull $remote_webapp_path ./
+}
+
+function push() {
+  ./platform-tools/adb push $local_webapp_path $remote_webapp_path
+}
+
+function serve() {
+  echo "${gold}Serving webapp on http://localhost:8000${default}"
+  python3 -m http.server 8000 --directory ./webapp
+}
+
+function backup_webapp_on_device() {
+  ./platform-tools/adb shell "cd $remote_superbird_path \
+    && [ -f $remote_superbird_path/webapp.bak.tar.xz ] \
+    && echo 'Backup already present on device' \
+    || (echo 'Creating backup on device' \
+    && tar caf ./webapp.bak.tar.xz --directory=webapp .)"
+}
+
+function restore_webapp_on_device() {
+  ./platform-tools/adb shell "cd $remote_superbird_path \
+    && [ -f $remote_superbird_path/webapp.bak.tar.xz ] \
+    && echo 'Restoring backup on device' \
+    && rm -rf $remote_superbird_path/webapp \
+    && mkdir $remote_superbird_path/webapp \
+    && tar xafm $remote_superbird_path/webapp.bak.tar.xz -C $remote_superbird_path/webapp \
+    || echo 'backup not present on device'"
+}
+
+function device_check() {
+  if [ -z "$ATTACHED" ]; then
+    echo "${red}No device attached. Exiting.${default}"
+    exit 1
+  fi
+}
+
+if [ "$1" = "--shell" ]; then
+  device_check
+  mount
+  backup_webapp_on_device
+  shell
+elif [ "$1" = "--restore" ]; then
+  restore_webapp_on_device
+  restart_chromium
+elif [ "$1" = "--serve" ]; then
+  serve
+elif [ "$1" = "--backup" ]; then
+  device_check
+  backup_local
+elif [ "$1" = "--pull" ]; then
+  device_check
+  mount
+  pull
+elif [ "$1" = "--push" ]; then
+  device_check
+  mount
+  push
+  openPort
+  restart_chromium
+elif [ "$1" = "--reboot" ]; then
+  device_check
+  reboot
+else
+  echo "${red}Invalid argument. Exiting.${default}"
+  exit 1
+fi
+
+
