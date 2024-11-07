@@ -5,6 +5,7 @@ interface WeatherDetailsProps {
     feelsLike: string;
     humidity: string;
     windSpeed: string;
+    units: string;
   };
 }
 
@@ -32,7 +33,7 @@ export function WeatherDetails({ details }: WeatherDetailsProps) {
           <Wind className="w-5 h-5 text-green-400" />
           <span className="text-white/60">Wind speed</span>
         </div>
-        <span>{details.windSpeed}</span>
+        <span>{details.windSpeed} {details.units === 'us' ? 'mph' : 'km/h'}</span>
       </div>
     </div>
   );

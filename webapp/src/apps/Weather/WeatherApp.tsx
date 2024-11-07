@@ -5,6 +5,11 @@ import { Forecast } from './components/Forecast';
 import WeatherHandler from './server/weather';
 import moment from 'moment-timezone'; //bc time is hard
 
+// NOTE: technically with how our weather data is being called, its always in US units, so conversion will always be from US to SI
+// but i implemented it anyways if we ever change the api or send a unit parameter to the api
+// why didnt i just send a unit parameter to the api? because heat index relies on the units being in Farhenheit
+// so i would have to convert it anyways
+
 interface WeatherData {
   periods: Period[];
 }
@@ -31,25 +36,58 @@ const WeatherApp = () => {
       weatherHandlerRef.current = new WeatherHandler();
     }
     fetchWeatherData();
-  }, []);
+  }, [units]);
 
   const fetchWeatherData = async () => {
     try {
       const response = await weatherHandlerRef.current?.getForecastData();
       if (response && Array.isArray(response)) {
-        // calculate feelslike
-        // using formula here: https://www.weather.gov/media/epz/wxcalc/heatIndex.pdf
         const updatedResponse = response.map(period => {
-          const T = period.temperature;
-          const RH = period.relativeHumidity;
-          const feelsLike = -42.379 + 2.04901523 * T + 10.14333127 * RH - 0.22475541 * T * RH - 0.00683783 * T * T - 0.05481717 * RH * RH + 0.00122874 * T * T * RH + 0.00085282 * T * RH * RH - 0.00000199 * T * T * RH * RH;
-          return { ...period, feelsLike };
+          const updatedPeriod = { ...period };
+          updatedPeriod.temperature = units !== 'us' ? convertTemperature(period.temperature, units) : period.temperature;
+          updatedPeriod.windSpeed = units !== 'us' ? convertWindSpeed(parseInt(period.windSpeed), units) : parseInt(period.windSpeed);
+          updatedPeriod.feelsLike = calculateHeatIndex(updatedPeriod.temperature, period.relativeHumidity);
+          return updatedPeriod;
         });
         setWeatherData({ periods: updatedResponse });
       }
     } catch (err) {
       setError('Failed to fetch weather data');
     }
+  };
+
+  const convertTemperature = (temperature: number, fromUnit: string): number => {
+    if (fromUnit === 'us') {
+      return Math.round((temperature * (9 / 5)) + 32);  // F to C
+    } else {
+      return Math.round((temperature - 32) * (5 / 9));  // C to F
+    }
+  };
+
+  const convertWindSpeed = (speed: number, fromUnit: string): number => {
+    // using this formula: https://www.weather.gov/media/epz/wxcalc/windConversion.pdf
+    if (fromUnit === 'us') {
+      return Math.round(speed * 0.621371)   // km/h to mph
+    } else {
+      return Math.round(speed * 1.609344)   // mph to km/h
+    }
+  }
+
+  const calculateHeatIndex = (T: number, RH: number): number => {
+    // heatIndex formula
+    // https://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
+    let HI = 0.5 * (T + 61.0 + ((T - 68.0) * 1.2) + (RH * 0.094));
+    if (HI >= 80) {
+      HI = -42.379 + 2.04901523 * T + 10.14333127 * RH - 0.22475541 * T * RH - 0.00683783 * T * T - 0.05481717 * RH * RH + 0.00122874 * T * T * RH + 0.00085282 * T * RH * RH - 0.00000199 * T * T * RH * RH;
+      if (RH < 13 && T >= 80 && T <= 112) {
+        const adjustment = ((13 - RH) / 4) * Math.sqrt((17 - Math.abs(T - 95)) / 17);
+        HI -= adjustment;
+      } else if (RH > 85 && T >= 80 && T <= 87) {
+        const adjustment = ((RH - 85) / 10) * ((87 - T) / 5);
+        HI += adjustment;
+      }
+    }
+    return Math.round(HI);
   };
 
   const toggleUnits = () => {
@@ -89,6 +127,7 @@ const WeatherApp = () => {
               feelsLike: `${weatherData?.periods[0].feelsLike}°`,
               humidity: `${weatherData?.periods[0].relativeHumidity}%`,
               windSpeed: weatherData?.periods[0].windSpeed,
+              units,
             }}
           />
           <Forecast
