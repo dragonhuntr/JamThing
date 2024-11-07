@@ -81,7 +81,17 @@ class SpotifyHandler {
             type: type,
             message: message
         };
-        this.ws.send(JSON.stringify(payload));
+
+        // Wait for WebSocket to be in OPEN state before sending
+        const sendWhenReady = () => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify(payload));
+            } else {
+                setTimeout(sendWhenReady, 100);
+            }
+        };
+
+        sendWhenReady();
     }
 
     // Function to add a callback for a specific message type

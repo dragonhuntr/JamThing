@@ -93,7 +93,14 @@ class WeatherHandler {
             type: type,
             message: message
         };
-        this.ws.send(JSON.stringify(payload));
+        const sendWhenReady = () => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify(payload));
+            } else {
+                setTimeout(sendWhenReady, 100);
+            }
+        };
+        sendWhenReady();
     }
 
     private addCallback(type: string, callback: Function) {
