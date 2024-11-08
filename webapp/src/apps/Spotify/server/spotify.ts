@@ -2,6 +2,11 @@ class SpotifyHandler {
     private ws: WebSocket;
     private callbacks: { [key: string]: Function[] };
 
+    // throttle requests to 5 per second to not spam spotify. change as needed.
+    private requestCount = 0;
+    private requestQueue: { type: string, message: any }[] = [];
+    private isThrottling = false;
+
     constructor() {
         // Initialize WebSocket connection using the native WebSocket object
         this.ws = new WebSocket('ws://localhost:8891');
@@ -75,6 +80,7 @@ class SpotifyHandler {
      * @param type The function name
      * @param message The message or arguments
      */
+
     private sendMessage(type: string, message: any = {}) {
         const payload = {
             app: 'spotify',
@@ -82,16 +88,35 @@ class SpotifyHandler {
             message: message
         };
 
-        // Wait for WebSocket to be in OPEN state before sending
         const sendWhenReady = () => {
             if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify(payload));
+                this.requestCount++;
+                if (this.requestCount >= 5) {
+                    this.isThrottling = true;
+                    setTimeout(() => {
+                        this.requestCount = 0;
+                        this.isThrottling = false;
+                        this.processQueue();
+                    }, 1000);
+                }
             } else {
                 setTimeout(sendWhenReady, 100);
             }
         };
 
-        sendWhenReady();
+        if (this.isThrottling) {
+            this.requestQueue.push({ type, message });
+        } else {
+            sendWhenReady();
+        }
+    }
+
+    private processQueue() {
+        while (!this.isThrottling && this.requestQueue.length > 0) {
+            const { type, message } = this.requestQueue.shift()!;
+            this.sendMessage(type, message);
+        }
     }
 
     // Function to add a callback for a specific message type

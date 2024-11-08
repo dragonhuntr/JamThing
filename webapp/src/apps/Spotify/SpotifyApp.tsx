@@ -18,7 +18,8 @@ function SpotifyApp() {
   const [fetchedQrCode, setFetchedQrCode] = useState<string | null>(null);
   const [volume, setVolume] = useState(50);
   const [isInitialFetch, setIsInitialFetch] = useState(true); // Initialize directly to true
-  const [trackInfo, setTrackInfo] = useState({
+  
+  const defaultTrackInfo = {
     id: '',
     title: 'Unknown Title',
     album: 'Unknown Album',
@@ -27,7 +28,9 @@ function SpotifyApp() {
     progress: 0,
     imageUrl: './images/Igor.jpg',
     shuffle: false
-  });
+  };
+
+  const [trackInfo, setTrackInfo] = useState(defaultTrackInfo);
 
   const spotifyHandlerRef = useRef<SpotifyHandler | null>(null);
 
@@ -46,13 +49,17 @@ function SpotifyApp() {
   }, [isInitialFetch]);
 
   const fetchCurrentPlayback = async () => {
-    console.log(isInitialFetch)
-    console.log('Fetching current playback...');
     try {
       const playback = await spotifyHandlerRef.current?.getCurrentPlayback();
       if (playback && playback.item) {
         const newTrackId = playback.item.id;
         const previousTrackId = trackInfo.id;
+
+        if (isInitialFetch) { // Only set volume on initial fetch
+          setVolume(playback.device.volume_percent);
+          const isLiked = await spotifyHandlerRef.current?.checkLiked(newTrackId) ?? false;
+          setIsLiked(isLiked);
+        }
 
         setTrackInfo({
           id: newTrackId,
@@ -64,15 +71,10 @@ function SpotifyApp() {
           imageUrl: playback.item.album.images[0].b64,
           shuffle: playback.shuffle_state
         });
-        setIsPlaying(playback.is_playing);
-        const isLiked = await spotifyHandlerRef.current?.checkLiked(newTrackId) ?? false;
-        setIsLiked(isLiked);
-
-        if (isInitialFetch) { // Only set volume on initial fetch
-          setVolume(playback.device.volume_percent);
-        }
 
         if (newTrackId !== previousTrackId) {
+          console.log(newTrackId);
+          console.log(previousTrackId)
           const image = new Image();
           image.src = playback.item.album.images[0].b64; // Assuming this is a base64 string
           image.onload = async () => {
@@ -85,21 +87,16 @@ function SpotifyApp() {
               console.error('Error finding dominant color:', error);
             }
           }
+
+          const isLiked = await spotifyHandlerRef.current?.checkLiked(newTrackId) ?? false;
+          setIsLiked(isLiked);
         }
 
+        setIsPlaying(playback.is_playing);
         setIsInitialFetch(false); // Mark initial fetch as complete
       }
       else {
-        setTrackInfo({
-          id: '',
-          title: 'Unknown Title',
-          album: 'Unknown Album',
-          artist: 'Unknown Artist',
-          duration: 0,
-          progress: 0,
-          imageUrl: './images/Igor.jpg',
-          shuffle: false
-        });
+        setTrackInfo(defaultTrackInfo); // Use the defaultTrackInfo object
         setIsPlaying(false);
         setIsLiked(false);
       }
@@ -118,7 +115,7 @@ function SpotifyApp() {
         // Limit volume to 0-100 range, 200 is the max volume delta
         if ((prevVolume + newVolume) >= 200 && volumeDelta > 0) return 100;
         if ((prevVolume + newVolume) <= 0 && volumeDelta < 0) return 0
-    
+
         spotifyHandlerRef.current?.volume(newVolume); // Send new volume to Spotify
         return newVolume; // Ensure immediate state update
       });
@@ -126,7 +123,7 @@ function SpotifyApp() {
 
     const removeVolumeListener = buttonControl.onVolumeChange(handleVolumeChange);
     const removeJamInitListener = buttonControl.onJamInit(handleJamInit); // Register handleJamInit
-    
+
     return () => {
       removeVolumeListener(); // Clean up the listener on component unmount
       removeJamInitListener();
@@ -151,11 +148,9 @@ function SpotifyApp() {
 
   const handleLikeToggle = async () => {
     try {
-      const newLikeStatus = !isLiked;
-      console.log('Toggling like status:', newLikeStatus);
-      await spotifyHandlerRef.current?.likeSong(newLikeStatus);
+      await spotifyHandlerRef.current?.likeSong(isLiked);
       await fetchCurrentPlayback();
-      setIsLiked(newLikeStatus);
+      setIsLiked(!isLiked);
     } catch (error) {
       console.error('Error toggling like status:', error);
     }
@@ -163,6 +158,7 @@ function SpotifyApp() {
 
   const handleNext = async () => {
     await spotifyHandlerRef.current?.next();
+    await fetchCurrentPlayback();
   };
 
   const lastPreviousPressRef = useRef<number | null>(null);
@@ -172,6 +168,7 @@ function SpotifyApp() {
     if (lastPreviousPressRef.current && (now - lastPreviousPressRef.current) < 2000) {
       // If pressed again within 2000ms, go to the previous track
       await spotifyHandlerRef.current?.previous();
+      await fetchCurrentPlayback();
     } else {
       // Otherwise, seek to the start of the current track
       await spotifyHandlerRef.current?.seek(0);
@@ -203,14 +200,14 @@ function SpotifyApp() {
 
   return (
     <div className="w-[800px] h-[480px] rounded-xl overflow-hidden flex flex-col justify-center relative"
-    style={{ backgroundColor }}
+      style={{ backgroundColor }}
     >
       <button
         onClick={async () => {
           await handleJamInit();
         }}
         className="absolute top-4 right-4 p-2 text-white/60 hover:text-white transition-colors"
-        style={{backgroundColor}}
+        style={{ backgroundColor }}
       >
         <Icons.QRCodeIcon className="w-8 h-8" />
       </button>

@@ -3,7 +3,7 @@ import { CurrentWeather } from './components/CurrentWeather';
 import { WeatherDetails } from './components/WeatherDetails';
 import { Forecast } from './components/Forecast';
 import WeatherHandler from './server/weather';
-import moment from 'moment-timezone'; //bc time is hard
+import { formatDate } from './utils/formatDate';
 
 // NOTE: technically with how our weather data is being called, its always in US units, so conversion will always be from US to SI
 // but i implemented it anyways if we ever change the api or send a unit parameter to the api
@@ -16,6 +16,7 @@ interface WeatherData {
 
 interface Period {
   startTime: string;
+  offset: number;
   temperature: number;
   temperatureUnit: string;
   windSpeed: string;
@@ -36,6 +37,10 @@ const WeatherApp = () => {
       weatherHandlerRef.current = new WeatherHandler();
     }
     fetchWeatherData();
+
+    const interval = setInterval(fetchWeatherData, 60 * 60 * 1000); // update every hour
+
+    return () => clearInterval(interval);
   }, [units]);
 
   const fetchWeatherData = async () => {
@@ -113,14 +118,15 @@ const WeatherApp = () => {
       <div className="flex flex-1">
         <CurrentWeather
           location="Erie, PA"
-          time={moment(weatherData?.periods[0].startTime).format('dddd, D MMMM, h:mm A')}
+          date={formatDate(weatherData?.periods[0].startTime, weatherData?.periods[0].offset, 'dddd, D MMMM')}
+          time={formatDate(weatherData?.periods[0].startTime, weatherData?.periods[0].offset, 'h:mm A')}
           currentWeather={{
             temperature: `${weatherData?.periods[0].temperature}°`,
             condition: weatherData?.periods[0].shortForecast,
           }}
           toggleUnits={toggleUnits}
         />
-        <div className="w-120 bg-white/5 backdrop-blur-sm pt-5 flex flex-col pl-14 pr-24">
+        <div className="w-120 bg-white/5 backdrop-blur-sm pt-5 flex flex-col pl-14 pr-20">
           <h3 className="text-white/90 text-4xl font-semibold mb-2 pt-3">Weather Details</h3>
           <WeatherDetails
             details={{
@@ -132,9 +138,10 @@ const WeatherApp = () => {
           />
           <Forecast
             forecast={weatherData?.periods.map(period => ({
-              time: moment(period.startTime).format('h:mm a'),
+              time: formatDate(period.startTime, period.offset, 'h:mm a'),
               temperature: `${period.temperature} ${period.temperatureUnit}`,
               probabilityOfPrecipitation: period.probabilityOfPrecipitation,
+              shortForecast: period.shortForecast,
             }))}
           />
         </div>

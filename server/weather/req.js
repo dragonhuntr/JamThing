@@ -28,8 +28,10 @@ async function handleWeatherRequest(type, message) {
 async function getForecast(units) {
     try {
         const data = await makeWeatherRequest(units);
+        const offset = new Date().getTimezoneOffset() * 60000; //in milliseconds
         const forecast = data.properties.periods.map(period => ({
-            startTime: period.startTime,
+            startTime: new Date(period.startTime).toISOString(),
+            offset: offset, // carthing timezone is invalid
             temperature: period.temperature,
             temperatureUnit: period.temperatureUnit,
             windSpeed: period.windSpeed,
