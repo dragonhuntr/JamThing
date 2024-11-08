@@ -1,70 +1,68 @@
-# Spotify AnyThing (For CarThing)
+# JamThing (for Spotify CarThing)
 
-![Spotify AnyThing Splash](https://github.com/peledies/spotify-any-thing/blob/main/webapp/images/appstart.png?raw=true)
+My take on replicating the original Spotify CarThing UI, but better. Powered with Spotify's Private API.
+
+## Features
+
+- Minimal UI similar to the CarThing
+- Listen together! Host a Jam session and share music with others in real-time
+- Weather App using data from https://weather.gov
+
+## Screenshots
+![player1](https://github.com/dragonhuntr/JamThing/blob/main/images/player1.png?raw=true)
+![player2](https://github.com/dragonhuntr/JamThing/blob/main/images/player2.png?raw=true)
+![player3](https://github.com/dragonhuntr/JamThing/blob/main/images/player3.png?raw=true)
+![jam](https://github.com/dragonhuntr/JamThing/blob/main/images/jam.png?raw=true)
+![weather](https://github.com/dragonhuntr/JamThing/blob/main/images/weather.png?raw=true)
 
 
-This is meant to expedite the development process and was specifically written to be run on Mac. I dont see any reason why it wont run on linux as well. If you get it to run, please PM me or create a PR with your harware specs and I'll update the compatibility list.
+## Usage
 
-This has been tested and confirmed to work on the following hardware:
-- 2018 Intel Mac Mini macOs 14.5
-
-## Summary
-
-- Install prerequsites
-- Clone this repository
-- Prepare a new firmware
-- Install the new firmware
-- Modify the webapp
-- Profit
-
-## Prerequsites
-```
-brew install libusb
-```
-
-```
-pip3 install git+https://github.com/superna9999/pyamlboot
+```bash
+git clone https://github.com/dragonhuntr/JamThing
+npm install
 ```
 
-## Clone this project
-> Make sure you have the `--recurse-submodules` at the end so you get the
-> dependant submodules.
-```
-git clone git@github.com:peledies/spotify-any-thing.git --recurse-submodules
+Navigate to `/server`
+```bash
+cd server
 ```
 
-
-## Prepare a Firmware
-Use the provided helper script to get a new patched firmware.
-```
-./prepare_firmware.sh
-```
-
-
-## The Hack
-You only have to do this once per device. After you have done this you can jump straight to using the `ct` commands.
-- hold buttons 1 & 4
-- plug in CarThing
-
-> NOTE: This may fail several times but it will eventualy make it all the way
-> through the process. It took 4 tries for me. ProTip: dont let your computer
-> go to sleep durring this process
-```
-./prepare_device.sh
+Create a `.env` file with your Spotify login details:
+```bash
+USERNAME=<YOUR SPOTIFY USERNAME/EMAIL>
+PASSWORD=<YOUR SPOTIFY PASSWORD>
 ```
 
+Run `ws.js`
+```bash
+node ws.js
+```
+
+If you haven't done so already, flash your CarThing by following this [GUIDE](https://github.com/ItsRiprod/DeskThing?tab=readme-ov-file#flashing) from ItsRiprod.
+
+Once flashing is done, run
+```bash
+./ct --push
+```
+
+The CarThing should reboot, and you're done! The new UI should show and automatically communicate with the server to retrieve data.
+
+To update the weather forecast location, refer to the [API Docs](https://www.weather.gov/documentation/services-web-api) to get your gridpoint URL, then change the endpoint in `/server/weather/req.js`
+
+The location name is also hardcoded currently, so update it in `/webapp/src/apps/Weather/WeatherApp.tsx`
 
 ## The CT script
 ADB is included in this repository and can be used on its own to interact with the CarThing. However the included `ct` script will do pretty much everything you need with fewer keystrokes
 
 The following commands work from the project root:
 
-Create a local backup in the `backup` directory from the contents of the CarThings webapp
+Create a local backup in the `backup` directory from the contents of `./webapp`
 ```
 ./ct --backup
 ```
 
-Serve the webapp directory on port `8000`. You can go to `http://localhost:8000` to preview your local webapp before pushing. (ctl-c to exit)
+Serve the webapp directory on port `8000`. You can go to `http://localhost:8000` to preview your local webapp before pushing. (ctrl-c to exit)
 ```
 ./ct --serve
 ```
@@ -88,3 +86,10 @@ Reboot the CarThing
 ```
 ./ct --reboot
 ```
+
+## Credits
+- [DeskThing](https://github.com/ItsRiprod/DeskThing) by ItsRiprod
+- [Spotify-AnyThing](https://github.com/peledies/spotify-any-thing) by peledies
+- [platform](https://github.com/3052/platform/tree/v1.4.9/spotify) by 3052
+
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/waisoon)
