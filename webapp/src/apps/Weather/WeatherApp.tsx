@@ -4,6 +4,7 @@ import { WeatherDetails } from './components/WeatherDetails';
 import { Forecast } from './components/Forecast';
 import WeatherHandler from './server/weather';
 import { formatDate } from './utils/formatDate';
+const location = 'Erie, PA';
 
 // NOTE: technically with how our weather data is being called, its always in US units, so conversion will always be from US to SI
 // but i implemented it anyways if we ever change the api or send a unit parameter to the api
@@ -117,7 +118,7 @@ const WeatherApp = () => {
     <div className="w-[800px] h-[480px] bg-gradient-to-br from-[#2D1E34] to-[#1E1E1E] rounded-xl overflow-hidden flex flex-col">
       <div className="flex flex-1">
         <CurrentWeather
-          location="Erie, PA"
+          location={location}
           date={formatDate(weatherData?.periods[0].startTime, weatherData?.periods[0].offset, 'dddd, D MMMM')}
           time={formatDate(weatherData?.periods[0].startTime, weatherData?.periods[0].offset, 'h:mm A')}
           currentWeather={{
