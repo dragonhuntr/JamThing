@@ -73,10 +73,8 @@ function SpotifyApp() {
         });
 
         if (newTrackId !== previousTrackId) {
-          console.log(newTrackId);
-          console.log(previousTrackId)
           const image = new Image();
-          image.src = playback.item.album.images[0].b64; // Assuming this is a base64 string
+          image.src = playback.item.album.images[0].b64;
           image.onload = async () => {
             try {
               const dominantColor = await findAlbumArtColor(image);

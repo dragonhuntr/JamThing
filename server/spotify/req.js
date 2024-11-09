@@ -29,27 +29,20 @@ async function makeSpotifyRequest(method, url, data = null) {
     } catch (error) {
         console.error('Error in makeSpotifyRequest:', error);
 
-        // If unauthorized, refresh token and retry
-        if (error.response && error.response.status === 401) {
-            console.log('Received 401 Unauthorized. Refreshing bearer token.');
-            await fetchSpotifyAuth(); // Fetch a new bearer token
-
-            // Retry the request with the new token
-            headers['Authorization'] = `Bearer ${getAccessToken()}`;
-            try {
-                const response = await axios({
-                    method: method,
-                    url: url,
-                    data: data,
-                    headers: headers
-                });
-                return response.data;
-            } catch (retryError) {
-                console.error('Retry failed:', retryError);
-                throw retryError;
-            }
-        } else {
-            throw error;
+        switch (error.response?.status) {
+            case 401:
+                console.log('Received 401 Unauthorized. Refreshing bearer token.');
+                await fetchSpotifyAuth(); // Fetch a new bearer token
+                return makeSpotifyRequest(method, url, data);
+            case 404:
+                if (error.response.data.error.message === 'NO_ACTIVE_DEVICE') {
+                    return { success: false, error: 'No active device' };
+                }
+                console.error('404 Error:', error.response.data);
+                return { success: false, error: 'Resource not found' };
+            default:
+                console.error('Unexpected Error:', error.response ? error.response.data : error.message);
+                return { success: false, error: 'An unexpected error occurred' };
         }
     }
 }
@@ -94,7 +87,6 @@ async function getCurrentPlayback() {
     try {
         let data = await makeSpotifyRequest('get', url);
         if (!data || !data.item) {
-            await pauseSong();
             return { success: false, error: 'No current playback' };
         }
         // add new b64 field to not taint the original object
