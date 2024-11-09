@@ -5,7 +5,7 @@ import WeatherApp from './apps/Weather/WeatherApp';
 import ButtonControls from './utils/buttonHelper'; // Import ButtonControls
 
 function App() {
-  const [currentView, setCurrentView] = useState('weather');
+  const [currentView, setCurrentView] = useState('spotify');
 
   // Function to toggle between 'weather' and 'spotify'
   const toggleView = () => {
