@@ -2,8 +2,9 @@ import { useEffect, useState, useRef } from 'react';
 import { CurrentWeather } from './components/CurrentWeather';
 import { WeatherDetails } from './components/WeatherDetails';
 import { Forecast } from './components/Forecast';
-import WeatherHandler from './server/weather';
 import { formatDate } from './utils/formatDate';
+import WeatherHandler from './server/weather';
+import ButtonControl from '../../utils/buttonHelper';
 const location = 'Erie, PA';
 
 // NOTE: technically with how our weather data is being called, its always in US units, so conversion will always be from US to SI
@@ -101,6 +102,20 @@ const WeatherApp = () => {
     fetchWeatherData();
   };
 
+  useEffect(() => {
+    const buttonControl = ButtonControl; // Get the singleton instance
+
+    const handleWeatherUpdate = () => {
+      fetchWeatherData();
+    };
+
+    const removeWeatherUpdateListener = buttonControl.onWeatherChange(handleWeatherUpdate);
+
+    return () => {
+      removeWeatherUpdateListener(); // Clean up the listener on component unmount
+    };
+  }, []);
+
   if (error) {
     return <div>{error}</div>;
   }
@@ -114,6 +129,7 @@ const WeatherApp = () => {
       </div>
     );
   }
+
   return (
     <div className="w-[800px] h-[480px] bg-gradient-to-br from-[#2D1E34] to-[#1E1E1E] rounded-xl overflow-hidden flex flex-col">
       <div className="flex flex-1">

@@ -1,14 +1,16 @@
 type VolumeChangeListener = (volumeDelta: number) => void;
 type ToggleViewListener = () => void;
+type JamInitListener = () => void;
+type WeatherChangeListener = () => void;
 
 class ButtonControls {
     private static instance: ButtonControls;
-    private volumeChangeListeners: VolumeChangeListener[];
-    private toggleViewListeners: ToggleViewListener[];
+    private volumeChangeListeners: VolumeChangeListener[] = [];
+    private toggleViewListeners: ToggleViewListener[] = [];
+    private jamInitListeners: JamInitListener[] = [];
+    private weatherChangeListeners: WeatherChangeListener[] = [];
 
     private constructor() {
-        this.volumeChangeListeners = [];
-        this.toggleViewListeners = [];
         this.registerWheelEventListener();
         this.registerKeyboardEventListener();
     }
@@ -36,10 +38,10 @@ class ButtonControls {
     private keyboardEventHandler = (event: KeyboardEvent) => {
         switch (event.key) {
             case '1':
-                this.notifyToggleView(); // Notify listeners to toggle view
+                this.notifyToggleView();
                 break;
             case '2':
-                // Placeholder for action when '2' is pressed
+                this.notifyWeatherChange();
                 break;
             case '3':
                 // Placeholder for action when '3' is pressed
@@ -69,14 +71,12 @@ class ButtonControls {
         this.jamInitListeners.forEach(listener => listener());
     }
 
-    private jamInitListeners: (() => void)[] = [];
-
-    onJamInit(listener: () => void): () => void {
+    onJamInit(listener: JamInitListener): () => void {
         this.jamInitListeners.push(listener);
         return () => this.removeJamInitListener(listener);
     }
 
-    private removeJamInitListener(listener: () => void) {
+    private removeJamInitListener(listener: JamInitListener) {
         this.jamInitListeners = this.jamInitListeners.filter(l => l !== listener);
     }
 
@@ -93,11 +93,26 @@ class ButtonControls {
         this.volumeChangeListeners = this.volumeChangeListeners.filter(l => l !== listener);
     }
 
+    private notifyWeatherChange() {
+        this.weatherChangeListeners.forEach(listener => listener());
+    }
+
+    onWeatherChange(listener: WeatherChangeListener): () => void {
+        this.weatherChangeListeners.push(listener);
+        return () => this.removeWeatherChangeListener(listener);
+    }
+
+    private removeWeatherChangeListener(listener: WeatherChangeListener) {
+        this.weatherChangeListeners = this.weatherChangeListeners.filter(l => l !== listener);
+    }
+
     destroy() {
         document.removeEventListener('wheel', this.wheelEventHandler);
         document.removeEventListener('keydown', this.keyboardEventHandler);
         this.volumeChangeListeners = [];
         this.toggleViewListeners = [];
+        this.jamInitListeners = [];
+        this.weatherChangeListeners = [];
     }
 }
 
