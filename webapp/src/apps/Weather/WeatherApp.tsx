@@ -32,6 +32,7 @@ const WeatherApp = () => {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [units, setUnits] = useState<string>('si');
   const [error, setError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false); // New state for update visual
   const weatherHandlerRef = useRef<WeatherHandler | null>(null);
 
   useEffect(() => {
@@ -46,6 +47,7 @@ const WeatherApp = () => {
   }, [units]);
 
   const fetchWeatherData = async () => {
+    setIsUpdating(true); // Start visual update
     try {
       const response = await weatherHandlerRef.current?.getForecastData();
       if (response && Array.isArray(response)) {
@@ -60,6 +62,8 @@ const WeatherApp = () => {
       }
     } catch (err) {
       setError('Failed to fetch weather data');
+    } finally {
+      setIsUpdating(false); // End visual update
     }
   };
 
@@ -163,6 +167,7 @@ const WeatherApp = () => {
           />
         </div>
       </div>
+      {isUpdating && <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-50 flex items-center justify-center text-white">Updating...</div>}
     </div>
   );
 }
