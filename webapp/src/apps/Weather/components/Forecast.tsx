@@ -1,4 +1,4 @@
-import { Sun, Cloud, CloudRain, CloudLightning, CloudSnow } from './Icons';
+import { getWeatherIconAndColor } from '../utils/getWeatherIconAndColor';
 
 interface ForecastItemProps {
   time: string;
@@ -17,38 +17,11 @@ interface ForecastProps {
 }
 
 function ForecastItem({ time, temperature, probabilityOfPrecipitation, shortForecast }: ForecastItemProps) {
-  const getWeatherIcon = (forecast: string) => {
-    // filtered from https://www.weather.gov/eax/pointforecasttextphrase
-    const weatherMapping = {
-      "Thunderstorms": CloudLightning,
-      "Sprinkles": CloudRain,
-      "Rain": CloudRain,
-      "Showers": CloudRain,
-      "Drizzle": CloudRain,
-      "Heavy Rain": CloudRain,
-      "Snow": CloudSnow,
-      "Flurries": CloudSnow,
-      "Sleet": CloudSnow,
-      "Sunny": Sun,
-      "Cloudy": Cloud,
-      "Clear": Sun,
-      "Clearing": Cloud,
-      "Decreasing Clouds": Cloud,
-      "Wintry Mix": CloudSnow
-    };
-
-    const matchedWeather = Object.keys(weatherMapping).find(key => 
-      forecast.toLowerCase().includes(key.toLowerCase())
-    );
-
-    const IconComponent = matchedWeather ? weatherMapping[matchedWeather as keyof typeof weatherMapping] : Cloud;
-    return <IconComponent className="w-8 h-8 text-white/60" />;
-  };
-  
+  const { Icon, color } = getWeatherIconAndColor(shortForecast);
   return (
     <div className="flex flex-col items-center text-lg">
       <span className="text-white/60">{time}</span>
-      {getWeatherIcon(shortForecast)}
+      <Icon className={`w-10 h-10 ${color}`} />
       <span className="text-white">{temperature}</span>
       <span className="text-white/60">{probabilityOfPrecipitation}%</span>
     </div>
