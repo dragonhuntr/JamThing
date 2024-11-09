@@ -1,6 +1,6 @@
 # JamThing (for Spotify CarThing)
 
-My take on replicating the original Spotify CarThing UI, but better. Powered with Spotify's Private API.
+My take on replicating the original Spotify CarThing UI, but better. Powered with Spotify's Private API ([Disclaimer](https://github.com/dragonhuntr/JamThing?tab=readme-ov-file#disclaimer))
 
 ## Features
 
@@ -27,7 +27,6 @@ Navigate to `/server`
 ```bash
 cd server
 ```
-
 Create a `.env` file with your Spotify login details:
 ```bash
 USERNAME=<YOUR SPOTIFY USERNAME/EMAIL>
@@ -86,6 +85,9 @@ Reboot the CarThing
 ```
 ./ct --reboot
 ```
+
+## Disclaimer
+JamThing leverages private/internal endpoints to communicate with the Spotify API. This method is *probably forbidden* by them. Use at your own risk.
 
 ## Credits
 - [DeskThing](https://github.com/ItsRiprod/DeskThing) by ItsRiprod
