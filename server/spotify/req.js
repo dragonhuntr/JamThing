@@ -6,6 +6,10 @@ const { getAccessToken, fetchSpotifyAuth } = require('./auth');
 fetchSpotifyAuth();
 
 async function makeSpotifyRequest(method, url, data = null) {
+    const bearerToken = getAccessToken();
+    if (!bearerToken) {
+        throw new Error('No bearer token');
+    }
     const headers = {
         'Spotify-App-Version': '8.9.82.628',
         'Accept': 'application/json',
@@ -14,7 +18,7 @@ async function makeSpotifyRequest(method, url, data = null) {
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'Spotify/8.9.82 iOS/18.0 (iPhone16,2)',
         'Connection': 'keep-alive',
-        'Authorization': `Bearer ${getAccessToken()}`
+        'Authorization': `Bearer ${bearerToken}`
     }
 
     try {
