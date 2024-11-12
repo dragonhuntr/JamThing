@@ -5,7 +5,7 @@ const { getAccessToken, fetchSpotifyAuth } = require('./auth');
 
 fetchSpotifyAuth();
 
-async function makeSpotifyRequest(method, url, data = null) {
+async function makeSpotifyRequest(method, url, data = null, retryCount = 0) {
     const bearerToken = getAccessToken();
     if (!bearerToken) {
         throw new Error('No bearer token');
@@ -35,9 +35,14 @@ async function makeSpotifyRequest(method, url, data = null) {
 
         switch (error.response?.status) {
             case 401:
-                console.log('Received 401 Unauthorized. Refreshing bearer token.');
-                await fetchSpotifyAuth(); // Fetch a new bearer token
-                return makeSpotifyRequest(method, url, data);
+                if (retryCount < 3) {
+                    console.log('Received 401 Unauthorized. Refreshing bearer token.');
+                    await fetchSpotifyAuth(); // Fetch a new bearer token
+                    return makeSpotifyRequest(method, url, data, retryCount + 1);
+                } else {
+                    console.error('Max retries reached for 401 Unauthorized.');
+                    return { success: false, error: 'Unauthorized access after multiple attempts' };
+                }
             case 404:
                 if (error.response.data.error.message === 'NO_ACTIVE_DEVICE') {
                     return { success: false, error: 'No active device' };

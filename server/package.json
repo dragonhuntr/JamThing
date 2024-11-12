@@ -4,6 +4,7 @@
   "description": "",
   "main": "ws.js",
   "scripts": {
+    "main": "node ws.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
