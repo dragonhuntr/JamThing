@@ -1,0 +1,15 @@
+// https://github.com/librespot-org/librespot/blob/82076e882f3cdebec863a3c0aa79888ec47b3c76/protocol/proto/spotify/login5/v3/client_info.proto
+
+syntax = "proto3";
+
+package spotify.login5.v3;
+
+option objc_class_prefix = "SPTLogin5";
+option java_multiple_files = true;
+option optimize_for = CODE_SIZE;
+option java_package = "com.spotify.login5.v3.proto";
+
+message ClientInfo {
+    string client_id = 1;
+    string device_id = 2;
+}

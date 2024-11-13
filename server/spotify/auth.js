@@ -1,18 +1,26 @@
-const protobuf = require('protobufjs/minimal');
+const { loadProtobufs } = require('./proto-loader');
 const crypto = require('crypto');
 const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') })
 
 const android_client_id = '9a8d2f0ce77a4e248bb71fefcb557637';
 
 var accessToken = '';
 
+// load protobufs
+const root = loadProtobufs();
+
+// get message types
+const LoginRequest = root.lookupType('spotify.login5.v3.LoginRequest');
+const LoginResponse = root.lookupType('spotify.login5.v3.LoginResponse');
+
 async function fetchSpotifyAuth() {
     try {
-        const username = process.env.USERNAME;
-        const password = process.env.PASSWORD;
+        const username = process.env.SPOTIFY_USERNAME;
+        const password = process.env.SPOTIFY_PASSWORD;
 
         tempToken = await login(username, password);
         accessToken = await getApiToken(tempToken);
@@ -27,27 +35,26 @@ async function fetchSpotifyAuth() {
 function startTokenRefreshInterval() {
     fetchSpotifyAuth();
 
-    // Refresh token every 45 minutes, but token technically expires after 60 minutes
+    // refresh token every 45 minutes, but token technically expires after 60 minutes
     setInterval(fetchSpotifyAuth, 45 * 60 * 1000);
 }
 
-// Helper functions and classes from testauth.js
-
-// Solve hash cash challenge
+// solve hash cash challenge
 function solveHashCash(login_context, prefix, length) {
     const sha1 = crypto.createHash('sha1').update(login_context).digest();
     let counter = BigInt(0);
     let target = BigInt('0x' + sha1.slice(12).toString('hex'));
-
+    
     while (true) {
         const suffix = Buffer.alloc(16);
         suffix.writeBigUInt64BE(target, 0);
         suffix.writeBigUInt64BE(counter, 8);
 
-        const sum = crypto.createHash('sha1').update(Buffer.concat([prefix, suffix])).digest();
-        const sumValue = BigInt('0x' + sum.slice(12).toString('hex'));
-
-        if (trailingZeros64(sumValue) >= length) {
+        const sum = crypto.createHash('sha1')
+            .update(Buffer.concat([prefix, suffix]))
+            .digest();
+        
+        if (trailingZeros64(BigInt('0x' + sum.slice(12).toString('hex'))) >= length) {
             return suffix;
         }
         counter++;
@@ -64,212 +71,84 @@ function trailingZeros64(value) {
     return zeros;
 }
 
-// Helper functions to encode and decode Protobuf messages
-function encodeMessage(fields) {
-    const writer = protobuf.Writer.create();
-
-    for (const field of fields) {
-        const { number, type, value } = field;
-
-        if (type === 'bytes') {
-            writer.uint32((number << 3) | 2); // Wire type 2 (length-delimited)
-            writer.bytes(value);
-        } else if (type === 'string') {
-            writer.uint32((number << 3) | 2); // Wire type 2 (length-delimited)
-            writer.string(value);
-        } else if (type === 'message') {
-            const nestedBuffer = encodeMessage(value);
-            writer.uint32((number << 3) | 2); // Wire type 2 (length-delimited)
-            writer.bytes(nestedBuffer);
-        } else if (type === 'int32') {
-            writer.uint32((number << 3) | 0); // Wire type 0 (varint)
-            writer.int32(value);
-        } else if (type === 'uint32') {
-            writer.uint32((number << 3) | 0); // Wire type 0 (varint)
-            writer.uint32(value);
-        } else if (type === 'bool') {
-            writer.uint32((number << 3) | 0); // Wire type 0 (varint)
-            writer.bool(value);
-        }
-    }
-
-    return writer.finish();
-}
-
-function decodeMessage(buffer) {
-    const reader = protobuf.Reader. create(buffer);
-    const message = {};
-
-    while (reader.pos < reader.len) {
-        const tag = reader.uint32();
-        const number = tag >>> 3;
-        const wireType = tag & 7;
-
-        if (wireType === 0) {
-            const value = reader.uint64();
-            message[number] = value;
-        } else if (wireType === 1) {
-            const value = reader.fixed64();
-            message[number] = value;
-        } else if (wireType === 2) {
-            const length = reader.uint32();
-            const end = reader.pos + length;
-            const bytes = reader.buf.slice(reader.pos, end);
-            reader.pos = end;
-            message[number] = bytes;
-        } else if (wireType === 5) {
-            const value = reader.fixed32();
-            message[number] = value;
-        } else {
-            throw new Error(`Unsupported wire type: ${wireType}`);
-        }
-    }
-
-    return message;
-}
-
-class LoginOk {
-    constructor(message) {
-        this.message = message;
-    }
-
-    accessToken() {
-        const okMessage = decodeMessage(this.message[1]);
-        const accessTokenBytes = okMessage[2];
-        if (!accessTokenBytes) {
-            return [null, false];
-        }
-        return [accessTokenBytes.toString(), true];
-    }
-}
-
-class LoginResponse {
-    constructor(message) {
-        this.message = message;
-    }
-
-    loginContext() {
-        const loginContext = this.message[5];
-        if (loginContext) {
-            return [loginContext, true];
-        }
-        return [null, false];
-    }
-
-    prefix() {
-        const challengesMessage = decodeMessage(this.message[3]);
-        const challengeMessage = decodeMessage(challengesMessage[1]);
-        const hashcashChallengeMessage = decodeMessage(challengeMessage[1]);
-        const prefix = hashcashChallengeMessage[1];
-        if (prefix) {
-            return [prefix, true];
-        }
-        return [null, false];
-    }
-}
-
 async function login(username, password) {
-    // Step 1: Initial request without proof
-    let loginRequestFields = [
-        {
-            number: 1,
-            type: 'message',
-            value: [
-                { number: 1, type: 'string', value: android_client_id }
-            ],
+    // create initial login request with just credentials
+    const loginRequest = LoginRequest.create({
+        client_info: {
+            client_id: android_client_id
         },
-        {
-            number: 101,
-            type: 'message',
-            value: [
-                { number: 1, type: 'bytes', value: Buffer.from(username) },
-                { number: 2, type: 'bytes', value: Buffer.from(password) },
-            ],
-        },
-    ];
-
-    let loginRequestBuffer = encodeMessage(loginRequestFields);
-
-    let responseBuffer = await httpRequest('POST', 'https://login5.spotify.com/v3/login', loginRequestBuffer, {
-        'Content-Type': 'application/x-protobuf',
+        password: {
+            id: username,
+            password: password
+        }
     });
 
-    let loginResponseMessage = decodeMessage(responseBuffer);
-    let loginResponse = new LoginResponse(loginResponseMessage);
+    try {
+        // first request to get challenge
+        const response = await httpRequest('POST', 'https://login5.spotify.com/v3/login', 
+            LoginRequest.encode(loginRequest).finish(), {
+                'Content-Type': 'application/x-protobuf',
+                'User-Agent': 'Spotify/8.9.68.456 Android/23 (Android SDK built for x86)'
+            }
+        );
 
-    // Step 2: Check for challenges
-    const [loginContext, contextOk] = loginResponse.loginContext();
-    const [prefix, prefixOk] = loginResponse.prefix();
+        // decode response
+        const responseData = LoginResponse.decode(response);
+        
+        // add error checking
+        if (!responseData.challenges || !responseData.challenges.challenges || !responseData.challenges.challenges[0]) {
+            throw new Error('unexpected response format - missing challenges');
+        }
+        
+        if (!responseData.challenges.challenges[0].hashcash) {
+            throw new Error('unexpected challenge type - expected hashcash');
+        }
+        
+        // get challenge params
+        const login_context = responseData.login_context;
+        const prefix = responseData.challenges.challenges[0].hashcash.prefix;
+        
+        // solve challenge
+        const solution = solveHashCash(login_context, prefix, 10);
 
-    if (!contextOk || !prefixOk) {
-        throw new Error('Failed to retrieve login context or prefix from login response.');
-    }
+        // create new request with solution
+        const finalRequest = LoginRequest.create({
+            client_info: {
+                client_id: android_client_id
+            },
+            login_context: login_context,
+            challenge_solutions: {
+                solutions: [{
+                    hashcash: {
+                        suffix: solution
+                    }
+                }]
+            },
+            password: {
+                id: username,
+                password: password
+            }
+        });
 
-    // Solve the hash cash challenge
-    const solution = solveHashCash(loginContext, prefix, 10);
+        // make final request
+        const finalResponse = await httpRequest('POST', 'https://login5.spotify.com/v3/login',
+            LoginRequest.encode(finalRequest).finish(), {
+                'Content-Type': 'application/x-protobuf',
+                'User-Agent': 'Spotify/8.9.68.456 Android/23 (Android SDK built for x86)'
+            }
+        );
 
-    // Build the proof message
-    const proofFields = [
-        {
-            number: 1,
-            type: 'message',
-            value: [
-                {
-                    number: 1,
-                    type: 'message',
-                    value: [
-                        { number: 1, type: 'bytes', value: solution },
-                    ],
-                },
-            ],
-        },
-    ];
+        const finalResponseData = LoginResponse.decode(finalResponse);
+        
+        if (!finalResponseData.ok) {
+            throw new Error('login failed');
+        }
 
-    // Step 3: Send login request with proof
-    loginRequestFields = [
-        {
-            number: 1,
-            type: 'message',
-            value: [
-                { number: 1, type: 'string', value: android_client_id },
-            ],
-        },
-        {
-            number: 2,
-            type: 'bytes',
-            value: loginContext,
-        },
-        {
-            number: 3,
-            type: 'message',
-            value: proofFields,
-        },
-        {
-            number: 101,
-            type: 'message',
-            value: [
-                { number: 1, type: 'bytes', value: Buffer.from(username) },
-                { number: 2, type: 'bytes', value: Buffer.from(password) },
-            ],
-        },
-    ];
+        return finalResponseData.ok.access_token;
 
-    loginRequestBuffer = encodeMessage(loginRequestFields);
-
-    responseBuffer = await httpRequest('POST', 'https://login5.spotify.com/v3/login', loginRequestBuffer, {
-        'Content-Type': 'application/x-protobuf',
-        'User-Agent': 'Spotify/8.9.68.456 Android/23 (Android SDK built for x86)',
-    });
-
-    // Decode the final response to get the access token
-    const loginOkMessage = decodeMessage(responseBuffer);
-    const loginOk = new LoginOk(loginOkMessage);
-
-    const [accessToken, success] = loginOk.accessToken();
-    if (success) {
-        return accessToken;
-    } else {
-        throw new Error('Failed to retrieve access token.');
+    } catch (error) {
+        console.error('login error:', error);
+        throw error;
     }
 }
 
@@ -287,10 +166,24 @@ function httpRequest(method, url, data, headers) {
             const chunks = [];
             res.on('data', (chunk) => chunks.push(chunk));
             res.on('end', () => {
+                const responseBuffer = Buffer.concat(chunks);
                 if (res.statusCode !== 200) {
-                    return reject(new Error(`Request failed with status code: ${res.statusCode}`));
+                    console.error('response status:', res.statusCode);
+                    console.error('response headers:', res.headers);
+                    console.error('response content-type:', res.headers['content-type']);
+                    
+                    // try different ways to show the response
+                    console.error('response as buffer:', responseBuffer);
+                    console.error('response as string:', responseBuffer.toString());
+                    try {
+                        console.error('response as json:', JSON.parse(responseBuffer.toString()));
+                    } catch (e) {
+                        // not json, ignore
+                    }
+                    
+                    return reject(new Error(`request failed with status code: ${res.statusCode}`));
                 }
-                resolve(Buffer.concat(chunks));
+                resolve(responseBuffer);
             });
         });
 
@@ -327,7 +220,7 @@ async function transferSession(loginToken) {
 
         return response.data.token;
     } catch (error) {
-        console.error('Error in transferSession:', error);
+        console.error('error in transferSession:', error);
         return { success: false, error: error.message };
     }
 }
@@ -397,7 +290,6 @@ async function getApiToken(loginToken) {
         });
 
         const data = response.data;
-        console.log(data);
         console.log('Got API token!');
         return data.accessToken;
     } catch (error) {
@@ -405,7 +297,6 @@ async function getApiToken(loginToken) {
         return { success: false, error: error.message };
     }
 }
-
 
 module.exports = {
     startTokenRefreshInterval,
