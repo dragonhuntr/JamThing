@@ -20,17 +20,17 @@ My take on replicating the original Spotify CarThing UI, but better. Powered wit
 
 ```bash
 git clone https://github.com/dragonhuntr/JamThing
-npm install
 ```
 
 Navigate to `/server`
 ```bash
 cd server
+npm install
 ```
 Create a `.env` file with your Spotify login details:
 ```bash
-USERNAME=<YOUR SPOTIFY USERNAME/EMAIL>
-PASSWORD=<YOUR SPOTIFY PASSWORD>
+SPOTIFY_USERNAME=<YOUR SPOTIFY USERNAME/EMAIL>
+SPOTIFY_PASSWORD=<YOUR SPOTIFY PASSWORD>
 ```
 
 Run `ws.js`
@@ -93,5 +93,6 @@ JamThing leverages private/internal endpoints to communicate with the Spotify AP
 - [DeskThing](https://github.com/ItsRiprod/DeskThing) by ItsRiprod
 - [Spotify-AnyThing](https://github.com/peledies/spotify-any-thing) by peledies
 - [platform](https://github.com/3052/platform/tree/v1.4.9/spotify) by 3052
+- [libresport](https://github.com/librespot-org/librespot) by librespot-org
 
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/waisoon)
