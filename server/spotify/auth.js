@@ -3,7 +3,8 @@ const crypto = require('crypto');
 const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') })
 
 const android_client_id = '9a8d2f0ce77a4e248bb71fefcb557637';
 
@@ -18,8 +19,8 @@ const LoginResponse = root.lookupType('spotify.login5.v3.LoginResponse');
 
 async function fetchSpotifyAuth() {
     try {
-        const username = process.env.USERNAME;
-        const password = process.env.PASSWORD;
+        const username = process.env.SPOTIFY_USERNAME;
+        const password = process.env.SPOTIFY_PASSWORD;
 
         tempToken = await login(username, password);
         accessToken = await getApiToken(tempToken);
@@ -94,21 +95,18 @@ async function login(username, password) {
         // decode response
         const responseData = LoginResponse.decode(response);
         
-        // add debug logging
-        console.log('login response:', JSON.stringify(responseData, null, 2));
-        
         // add error checking
         if (!responseData.challenges || !responseData.challenges.challenges || !responseData.challenges.challenges[0]) {
             throw new Error('unexpected response format - missing challenges');
         }
         
-        if (!responseData.challenges.challenges[0].hash_cash) {
-            throw new Error('unexpected challenge type - expected hash_cash');
+        if (!responseData.challenges.challenges[0].hashcash) {
+            throw new Error('unexpected challenge type - expected hashcash');
         }
         
         // get challenge params
         const login_context = responseData.login_context;
-        const prefix = responseData.challenges.challenges[0].hash_cash.prefix;
+        const prefix = responseData.challenges.challenges[0].hashcash.prefix;
         
         // solve challenge
         const solution = solveHashCash(login_context, prefix, 10);
@@ -121,7 +119,7 @@ async function login(username, password) {
             login_context: login_context,
             challenge_solutions: {
                 solutions: [{
-                    hash_cash: {
+                    hashcash: {
                         suffix: solution
                     }
                 }]
@@ -146,11 +144,7 @@ async function login(username, password) {
             throw new Error('login failed');
         }
 
-        return {
-            username: finalResponseData.ok.username,
-            accessToken: finalResponseData.ok.access_token,
-            expiresIn: finalResponseData.ok.access_token_expires_in
-        };
+        return finalResponseData.ok.access_token;
 
     } catch (error) {
         console.error('login error:', error);
@@ -296,7 +290,6 @@ async function getApiToken(loginToken) {
         });
 
         const data = response.data;
-        console.log(data);
         console.log('Got API token!');
         return data.accessToken;
     } catch (error) {
