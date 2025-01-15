@@ -7,51 +7,46 @@ interface GPU {
     memoryUsed_MB: number;
     memoryTotal_MB: number;
     gpuUtilization_Percent: number;
-  }
-  
-  interface GpuStatsProps {
+}
+
+interface GpuStatsProps {
     gpus: GPU[];
-  }
-  
-  export function GpuStats({ gpus }: GpuStatsProps) {
+}
+
+const mbToGb = (mb: number) => (mb / 1024).toFixed(2);
+
+export function GpuStats({ gpus }: GpuStatsProps) {
     return (
-      <div className="text-white">
-        <h2 className="text-2xl font-semibold mb-4">GPU</h2>
-        <div className="space-y-6">
-          {gpus.map((gpu) => (
-            <div key={gpu.index}>
-              <h3 className="text-white/60 mb-2">{gpu.name}</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Temperature</span>
-                  <span>{gpu.temperature_C}°C</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fan Speed</span>
-                  <span>{gpu.fanSpeed_Percent}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Power Draw</span>
-                  <span>{gpu.powerDraw_Watts}W</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Memory Usage</span>
-                  <span>{gpu.memoryUsed_MB}/{gpu.memoryTotal_MB} MB</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>GPU Utilization</span>
-                  <span>{gpu.gpuUtilization_Percent}%</span>
-                </div>
-                <div className="w-full h-2 bg-white/10 rounded-full mt-2">
-                  <div 
-                    className="h-full bg-purple-500 rounded-full"
-                    style={{ width: `${gpu.gpuUtilization_Percent}%` }}
-                  />
-                </div>
-              </div>
+        <div className="text-white">
+            <h2 className="text-xl font-semibold mb-4">GPU</h2>
+            <div className="overflow-x-auto">
+                <table className="min-w-full table-auto text-xs">
+                    <thead>
+                        <tr className="text-white/60 border-b border-white/20">
+                            <th className="text-left py-2">Name</th>
+                            <th className="text-center py-2">Temp</th>
+                            <th className="text-center py-2">Fan</th>
+                            <th className="text-center py-2">Power</th>
+                            <th className="text-center py-2">Memory (GB)</th>
+                            <th className="text-center py-2">Usage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {gpus.map((gpu) => (
+                            <tr key={gpu.index} className="border-b border-white/10">
+                                <td className="py-2">{gpu.name.replace('NVIDIA GeForce ', '')}</td>
+                                <td className="text-center py-2">{gpu.temperature_C}°C</td>
+                                <td className="text-center py-2">{gpu.fanSpeed_Percent}%</td>
+                                <td className="text-center py-2">{gpu.powerDraw_Watts}W</td>
+                                <td className="text-center py-2">
+                                    {mbToGb(gpu.memoryUsed_MB)}/{mbToGb(gpu.memoryTotal_MB)}
+                                </td>
+                                <td className="text-center py-2">{gpu.gpuUtilization_Percent}%</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
-          ))}
         </div>
-      </div>
     );
-  }
+}

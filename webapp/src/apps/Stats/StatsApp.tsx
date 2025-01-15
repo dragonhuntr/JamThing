@@ -114,7 +114,7 @@ function StatsApp() {
     return (
         <div className="w-[800px] h-[480px] bg-gradient-to-br from-[#2D1E34] to-[#1E1E1E] rounded-xl overflow-hidden p-8">
             <div className="flex flex-col h-full">
-                <h1 className="text-4xl font-bold text-white mb-8">System Statistics</h1>
+                <h1 className="text-2xl font-bold text-white mb-8">System Statistics</h1>
                 <div className="flex-1 flex gap-8">
                     <div className="flex-1">
                         <SystemStats cpu={stats.cpu} ram={stats.ram} />

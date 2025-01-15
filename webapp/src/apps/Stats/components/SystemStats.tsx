@@ -21,7 +21,7 @@ interface SystemStatsProps {
   
     return (
       <div className="text-white">
-        <h2 className="text-2xl font-semibold mb-4">CPU & RAM</h2>
+        <h2 className="text-xl font-semibold mb-4">CPU & RAM</h2>
         
         <div className="space-y-6">
           <div>
