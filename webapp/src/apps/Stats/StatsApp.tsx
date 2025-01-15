@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SystemStats } from './components/SystemStats';
 import { GpuStats } from './components/GpuStats';
+import StatsHandler from './server/stats';
 
 interface Stats {
     cpu: {
@@ -28,69 +29,30 @@ interface Stats {
 function StatsApp() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isUpdating, setIsUpdating] = useState(false);
+    const statsHandlerRef = useRef<StatsHandler | null>(null);
+
+    const fetchStatsData = async () => {
+        setIsUpdating(true);
+        try {
+            if (!statsHandlerRef.current) return;
+            const data = await statsHandlerRef.current.getStatsData();
+            setStats(data[0]);
+        } catch (err) {
+            setError('Failed to fetch system statistics');
+            console.error(err);
+        } finally {
+            setIsUpdating(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                /**const response = await fetch('https://pastebin.com/raw/5X1XpbF0');
-                if (!response.ok) {
-                  throw new Error('Failed to fetch stats');
-                }
-                const data = await response.json();*/
-                const data = {
-                    "gpus": [
-                        {
-                            "index": 0,
-                            "name": "NVIDIA GeForce RTX 3090",
-                            "temperature_C": 65.0,
-                            "fanSpeed_Percent": 45.0,
-                            "powerDraw_Watts": 250.0,
-                            "memoryUsed_MB": 10240.0,
-                            "memoryTotal_MB": 24576.0,
-                            "gpuUtilization_Percent": 80.0
-                        },
-                        {
-                            "index": 0,
-                            "name": "NVIDIA GeForce RTX 3090",
-                            "temperature_C": 65.0,
-                            "fanSpeed_Percent": 45.0,
-                            "powerDraw_Watts": 250.0,
-                            "memoryUsed_MB": 10240.0,
-                            "memoryTotal_MB": 24576.0,
-                            "gpuUtilization_Percent": 80.0
-                        },
-                        {
-                            "index": 0,
-                            "name": "NVIDIA GeForce RTX 3090",
-                            "temperature_C": 65.0,
-                            "fanSpeed_Percent": 45.0,
-                            "powerDraw_Watts": 250.0,
-                            "memoryUsed_MB": 10240.0,
-                            "memoryTotal_MB": 24576.0,
-                            "gpuUtilization_Percent": 80.0
-                        }
-                    ],
-                    "cpu": {
-                        "temperature": 55.0,
-                        "load": 0.25,
-                        "clockSpeed": 3800
-                    },
-                    "ram": {
-                        "total": 64000,
-                        "free": 20000,
-                        "used": 44000,
-                        "active": 30000
-                    }
-                }
-                setStats(data);
-            } catch (err) {
-                setError('Failed to fetch system statistics');
-                console.error(err);
-            }
-        };
+        if (!statsHandlerRef.current) {
+            statsHandlerRef.current = new StatsHandler();
+        }
+        fetchStatsData();
 
-        fetchStats();
-        const interval = setInterval(fetchStats, 1000); // Update every second
+        const interval = setInterval(fetchStatsData, 1000); // Update every second
 
         return () => clearInterval(interval);
     }, []);
