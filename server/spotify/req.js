@@ -103,7 +103,6 @@ async function getCurrentPlayback() {
         data.item.album.images[0].b64 = base64img
         return data; // Return the full playback data
     } catch (error) {
-        console.error('Error in getCurrentPlayback:', error);
         return { success: false, error: error.message };
     }
 }
