@@ -20,12 +20,11 @@ export function GpuStats({ gpus }: GpuStatsProps) {
         <div className="text-white">
             <h2 className="text-xl font-semibold mb-4">GPU</h2>
             <div className="overflow-x-auto">
-                <table className="min-w-full table-auto text-xs">
+                <table className="min-w-full table-auto text-xl">
                     <thead>
                         <tr className="text-white/60 border-b border-white/20">
                             <th className="text-left py-2">Name</th>
                             <th className="text-center py-2">Temp</th>
-                            <th className="text-center py-2">Fan</th>
                             <th className="text-center py-2">Power</th>
                             <th className="text-center py-2">Memory (GB)</th>
                             <th className="text-center py-2">Usage</th>
@@ -36,7 +35,6 @@ export function GpuStats({ gpus }: GpuStatsProps) {
                             <tr key={gpu.index} className="border-b border-white/10">
                                 <td className="py-2">{gpu.name.replace('NVIDIA GeForce ', '')}</td>
                                 <td className="text-center py-2">{gpu.temperature_C}°C</td>
-                                <td className="text-center py-2">{gpu.fanSpeed_Percent}%</td>
                                 <td className="text-center py-2">{gpu.powerDraw_Watts}W</td>
                                 <td className="text-center py-2">
                                     {mbToGb(gpu.memoryUsed_MB)}/{mbToGb(gpu.memoryTotal_MB)}

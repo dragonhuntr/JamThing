@@ -14,7 +14,7 @@ class StatsHandler {
         this.ws.addEventListener('message', (event) => {
             try {
                 const response = JSON.parse(event.data);
-                console.log('Received stats response:', response);
+                console.log('Received Stats response:', response);
 
                 if (response.type && this.callbacks[response.type]) {
                     this.callbacks[response.type].forEach(callback => callback(response.message));

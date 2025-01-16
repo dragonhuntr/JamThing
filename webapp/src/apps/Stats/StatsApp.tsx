@@ -7,7 +7,6 @@ interface Stats {
     cpu: {
         temperature: number;
         load: number;
-        clockSpeed: number;
     };
     ram: {
         total: number;
@@ -37,7 +36,7 @@ function StatsApp() {
         try {
             if (!statsHandlerRef.current) return;
             const data = await statsHandlerRef.current.getStatsData();
-            setStats(data[0]);
+            setStats(data);
         } catch (err) {
             setError('Failed to fetch system statistics');
             console.error(err);
@@ -76,12 +75,12 @@ function StatsApp() {
     return (
         <div className="w-[800px] h-[480px] bg-gradient-to-br from-[#2D1E34] to-[#1E1E1E] rounded-xl overflow-hidden p-8">
             <div className="flex flex-col h-full">
-                <h1 className="text-2xl font-bold text-white mb-8">System Statistics</h1>
+                <h1 className="text-2xl font-bold text-white mb-5">System Statistics</h1>
                 <div className="flex-1 flex gap-8">
-                    <div className="flex-1">
+                    <div className="w-2/5 h-full overflow-y-auto">
                         <SystemStats cpu={stats.cpu} ram={stats.ram} />
                     </div>
-                    <div className="flex-1">
+                    <div className="w-4/5 h-full overflow-y-auto pr-8">
                         <GpuStats gpus={stats.gpus} />
                     </div>
                 </div>

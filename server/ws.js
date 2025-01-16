@@ -4,6 +4,7 @@ const app = express();
 const path = require('path');
 const { handleSpotifyRequest } = require('./spotify/req');
 const { handleWeatherRequest } = require('./weather/req');
+const { handleStatsRequest } = require('./stats/req');
 
 app.use('/', express.static(path.resolve(__dirname, '../client')));
 
@@ -38,6 +39,13 @@ wsServer.on('connection', function (ws) {
                         app: 'weather',
                         type: message.type,
                         message: response
+                    }));
+                } else if (message.app === 'stats') {
+                    const response = await handleStatsRequest(message.type);
+                    ws.send(JSON.stringify({
+                        app: 'stats',
+                        type: message.type,
+                        message: response.data
                     }));
                 } else {
                     console.error('Unknown app:', message.app);

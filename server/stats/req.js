@@ -18,14 +18,14 @@ async function makeStatsRequest() {
 
 async function handleStatsRequest(type) {
     switch (type) {
-        case 'getStats':
-            return await getStats();
+        case 'getStatsData':
+            return await getStatsData();
         default:
             return { error: 'Unknown request type' };
     }
 }
 
-async function getStats() {
+async function getStatsData() {
     try {
         const data = await makeStatsRequest();
         return { success: true, data };
