@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import SpotifyApp from './apps/Spotify/SpotifyApp';
 import WeatherApp from './apps/Weather/WeatherApp';
-import StatsApp from './apps/Stats/StatsApp';
 import ButtonControls from './utils/buttonHelper';
 
 function App() {
@@ -15,11 +14,9 @@ function App() {
           case 'spotify':
             return 'weather';
           case 'weather':
-            return 'stats';
-          case 'stats':
             return 'spotify';
           default:
-            return 'stats';
+            return 'spotify';
         }
       });
     });
@@ -34,9 +31,6 @@ function App() {
         </div>
         <div style={{ display: currentView === 'weather' ? 'block' : 'none' }}>
           <WeatherApp />
-        </div>
-        <div style={{ display: currentView === 'stats' ? 'block' : 'none' }}>
-          <StatsApp />
         </div>
       </div>
     </Router>

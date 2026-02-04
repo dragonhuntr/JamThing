@@ -4,11 +4,17 @@ const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../.env') })
+require('dotenv').config({ path: path.join(__dirname, '../../.env') })
 
 const android_client_id = '9a8d2f0ce77a4e248bb71fefcb557637';
 
 var accessToken = '';
+
+// Generate a device ID (typically a UUID-like string for Android)
+function generateDeviceId() {
+    // Android device IDs are typically 40 hex characters
+    return crypto.randomBytes(20).toString('hex');
+}
 
 // load protobufs
 const root = loadProtobufs();
@@ -16,13 +22,21 @@ const root = loadProtobufs();
 // get message types
 const LoginRequest = root.lookupType('spotify.login5.v3.LoginRequest');
 const LoginResponse = root.lookupType('spotify.login5.v3.LoginResponse');
+// Try to lookup Duration type, but it might not be loaded
+let Duration;
+try {
+    Duration = root.lookupType('google.protobuf.Duration');
+} catch (e) {
+    // Duration type not found, will use plain object
+    Duration = null;
+}
 
 async function fetchSpotifyAuth() {
     try {
         const username = process.env.SPOTIFY_USERNAME;
         const password = process.env.SPOTIFY_PASSWORD;
 
-        tempToken = await login(username, password);
+        const tempToken = await login(username, password);
         accessToken = await getApiToken(tempToken);
 
         console.log('New access token obtained.');
@@ -41,9 +55,12 @@ function startTokenRefreshInterval() {
 
 // solve hash cash challenge
 function solveHashCash(login_context, prefix, length) {
+    const startTime = Date.now();
     const sha1 = crypto.createHash('sha1').update(login_context).digest();
+    // Extract 8 bytes (bytes 12-19) from the SHA1 hash for the target
+    const targetBytes = sha1.slice(12, 20);
+    const target = BigInt('0x' + targetBytes.toString('hex'));
     let counter = BigInt(0);
-    let target = BigInt('0x' + sha1.slice(12).toString('hex'));
     
     while (true) {
         const suffix = Buffer.alloc(16);
@@ -54,11 +71,19 @@ function solveHashCash(login_context, prefix, length) {
             .update(Buffer.concat([prefix, suffix]))
             .digest();
         
-        if (trailingZeros64(BigInt('0x' + sum.slice(12).toString('hex'))) >= length) {
-            return suffix;
+        // Check trailing zeros in the last 8 bytes (bytes 12-19)
+        const sumBytes = sum.slice(12, 20);
+        if (trailingZeros64(BigInt('0x' + sumBytes.toString('hex'))) >= length) {
+            const duration = Date.now() - startTime;
+            return {
+                suffix: suffix,
+                duration: {
+                    seconds: Math.floor(duration / 1000),
+                    nanos: (duration % 1000) * 1000000
+                }
+            };
         }
         counter++;
-        target++;
     }
 }
 
@@ -72,10 +97,16 @@ function trailingZeros64(value) {
 }
 
 async function login(username, password) {
+    const MAX_LOGIN_TRIES = 3;
+    const LOGIN_TIMEOUT = 3000; // 3 seconds
+    
+    const deviceId = generateDeviceId();
+    
     // create initial login request with just credentials
-    const loginRequest = LoginRequest.create({
+    let loginRequest = LoginRequest.create({
         client_info: {
-            client_id: android_client_id
+            client_id: android_client_id,
+            device_id: deviceId
         },
         password: {
             id: username,
@@ -83,68 +114,161 @@ async function login(username, password) {
         }
     });
 
+    let count = 0;
+    let response;
+
     try {
-        // first request to get challenge
-        const response = await httpRequest('POST', 'https://login5.spotify.com/v3/login', 
-            LoginRequest.encode(loginRequest).finish(), {
-                'Content-Type': 'application/x-protobuf',
-                'User-Agent': 'Spotify/8.9.68.456 Android/23 (Android SDK built for x86)'
+        while (count < MAX_LOGIN_TRIES) {
+            count++;
+            
+            // make request
+            response = await httpRequest('POST', 'https://login5.spotify.com/v3/login', 
+                LoginRequest.encode(loginRequest).finish(), {
+                    'Content-Type': 'application/x-protobuf',
+                    'Accept': 'application/x-protobuf',
+                    'User-Agent': 'Spotify/8.9.68.456 Android/23 (Android SDK built for x86)'
+                }
+            );
+
+            // decode response
+            const responseData = LoginResponse.decode(response);
+            
+            // Debug: log response structure
+            const debugInfo = {
+                hasOk: !!responseData.ok,
+                hasChallenges: !!responseData.challenges,
+                errorValue: responseData.error,
+                loginContextPresent: !!responseData.login_context,
+                okDetails: responseData.ok ? { username: responseData.ok.username, hasToken: !!responseData.ok.access_token } : null,
+                challengesCount: responseData.challenges ? responseData.challenges.challenges?.length : null
+            };
+            console.log('Response data:', debugInfo);
+            
+            // check for success (oneof field: ok is set)
+            if (responseData.ok) {
+                return responseData.ok.access_token;
             }
-        );
-
-        // decode response
-        const responseData = LoginResponse.decode(response);
-        
-        // add error checking
-        if (!responseData.challenges || !responseData.challenges.challenges || !responseData.challenges.challenges[0]) {
-            throw new Error('unexpected response format - missing challenges');
-        }
-        
-        if (!responseData.challenges.challenges[0].hashcash) {
-            throw new Error('unexpected challenge type - expected hashcash');
-        }
-        
-        // get challenge params
-        const login_context = responseData.login_context;
-        const prefix = responseData.challenges.challenges[0].hashcash.prefix;
-        
-        // solve challenge
-        const solution = solveHashCash(login_context, prefix, 10);
-
-        // create new request with solution
-        const finalRequest = LoginRequest.create({
-            client_info: {
-                client_id: android_client_id
-            },
-            login_context: login_context,
-            challenge_solutions: {
-                solutions: [{
-                    hashcash: {
-                        suffix: solution
+            
+            // check for challenges (oneof field: challenges is set)
+            // Check challenges BEFORE error, since error enum defaults to 0 (falsy)
+            if (responseData.challenges) {
+                const challenges = responseData.challenges.challenges;
+                
+                if (!challenges || challenges.length === 0) {
+                    throw new Error('unexpected response format - empty challenges');
+                }
+                
+                // handle challenges
+                const solutions = [];
+                let loginContext = responseData.login_context;
+                
+                for (const challenge of challenges) {
+                    // oneof field: check which challenge type is set
+                    if (challenge.code) {
+                        throw new Error('Code challenge is not supported');
                     }
-                }]
-            },
-            password: {
-                id: username,
-                password: password
+                    
+                    if (challenge.hashcash) {
+                        const hashcashChallenge = challenge.hashcash;
+                        const prefix = hashcashChallenge.prefix;
+                        const length = hashcashChallenge.length || 10; // default to 10 if not provided
+                        
+                        console.log('Solving hashcash challenge:', {
+                            prefixLength: prefix.length,
+                            prefixHex: prefix.toString('hex').substring(0, 40) + '...',
+                            length: length,
+                            loginContextLength: loginContext.length,
+                            loginContextHex: loginContext.toString('hex').substring(0, 40) + '...'
+                        });
+                        
+                        // solve challenge
+                        const solution = solveHashCash(loginContext, prefix, length);
+                        
+                        // Verify the solution is correct
+                        const verifyHash = crypto.createHash('sha1')
+                            .update(Buffer.concat([prefix, solution.suffix]))
+                            .digest();
+                        const verifyBytes = verifyHash.slice(12, 20);
+                        const verifyZeros = trailingZeros64(BigInt('0x' + verifyBytes.toString('hex')));
+                        
+                        console.log('Hashcash solution:', {
+                            suffixLength: solution.suffix.length,
+                            suffixHex: solution.suffix.toString('hex'),
+                            durationSeconds: solution.duration.seconds,
+                            durationNanos: solution.duration.nanos,
+                            requiredZeros: length,
+                            actualZeros: verifyZeros,
+                            isValid: verifyZeros >= length
+                        });
+                        
+                        if (verifyZeros < length) {
+                            throw new Error(`Hashcash solution invalid: got ${verifyZeros} zeros, need ${length}`);
+                        }
+                        
+                        // Create Duration message properly if type is available, otherwise use plain object
+                        const durationMsg = Duration 
+                            ? Duration.create({
+                                seconds: solution.duration.seconds,
+                                nanos: solution.duration.nanos
+                            })
+                            : {
+                                seconds: solution.duration.seconds,
+                                nanos: solution.duration.nanos
+                            };
+                        
+                        solutions.push({
+                            hashcash: {
+                                suffix: solution.suffix,
+                                duration: durationMsg
+                            }
+                        });
+                    }
+                }
+                
+                // update login request with solutions and context
+                loginRequest = LoginRequest.create({
+                    client_info: {
+                        client_id: android_client_id,
+                        device_id: deviceId
+                    },
+                    login_context: loginContext,
+                    challenge_solutions: {
+                        solutions: solutions
+                    },
+                    password: {
+                        id: username,
+                        password: password
+                    }
+                });
+                
+                console.log('Sending request with solution, attempt:', count);
+                
+                // continue loop to retry with solution
+                continue;
             }
-        });
-
-        // make final request
-        const finalResponse = await httpRequest('POST', 'https://login5.spotify.com/v3/login',
-            LoginRequest.encode(finalRequest).finish(), {
-                'Content-Type': 'application/x-protobuf',
-                'User-Agent': 'Spotify/8.9.68.456 Android/23 (Android SDK built for x86)'
+            
+            // check for error (oneof field: error is set)
+            // Only check error if ok and challenges are not set
+            // Note: error enum can be 0 (UNKNOWN_ERROR), which is falsy, so we check explicitly
+            if (!responseData.ok && !responseData.challenges) {
+                const errorCode = responseData.error;
+                // Handle retryable errors
+                // 4 = TIMEOUT, 6 = TOO_MANY_ATTEMPTS
+                if (errorCode === 4 || errorCode === 6) {
+                    if (count < MAX_LOGIN_TRIES) {
+                        console.log(`Received error ${errorCode}, retrying in ${LOGIN_TIMEOUT}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, LOGIN_TIMEOUT));
+                        continue;
+                    }
+                }
+                throw new Error(`Login error: ${errorCode}`);
             }
-        );
-
-        const finalResponseData = LoginResponse.decode(finalResponse);
-        
-        if (!finalResponseData.ok) {
-            throw new Error('login failed');
+            
+            // unexpected response format
+            throw new Error('unexpected response format - no ok, error, or challenges field set');
         }
-
-        return finalResponseData.ok.access_token;
+        
+        throw new Error(`Couldn't successfully authenticate after ${MAX_LOGIN_TRIES} times`);
 
     } catch (error) {
         console.error('login error:', error);
@@ -221,7 +345,7 @@ async function transferSession(loginToken) {
         return response.data.token;
     } catch (error) {
         console.error('error in transferSession:', error);
-        return { success: false, error: error.message };
+        throw error;
     }
 }
 
@@ -249,6 +373,11 @@ async function getCookie(tempToken) {
         const $ = cheerio.load(csrfResp.data);
         const csrfToken = JSON.parse($('#__NEXT_DATA__').text()).props.pageProps.csrfSettings.initialToken;
         const csrfCookie = csrfResp.headers['set-cookie'];
+        
+        // Format set-cookie array as Cookie header string
+        const cookieString = Array.isArray(csrfCookie) 
+            ? csrfCookie.map(c => c.split(';')[0]).join('; ')
+            : csrfCookie;
 
         const cookieResp = await axios.post('https://accounts.spotify.com/api/login/ott/verify', { "token": tempToken }, {
             headers: {
@@ -264,16 +393,20 @@ async function getCookie(tempToken) {
                 'Sec-Fetch-Mode': 'cors',
                 'Sec-Fetch-Dest': 'empty',
                 'Referer': 'https://accounts.spotify.com/en-GB/login/ott/v2',
-                'Cookie': csrfCookie,
+                'Cookie': cookieString,
                 'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
                 'Content-Type': 'text/plain;charset=UTF-8'
             }
         });
 
-        return cookieResp.headers['set-cookie'];
+        // Format set-cookie array as Cookie header string
+        const setCookieHeaders = cookieResp.headers['set-cookie'];
+        return Array.isArray(setCookieHeaders)
+            ? setCookieHeaders.map(c => c.split(';')[0]).join('; ')
+            : setCookieHeaders;
     } catch (error) {
         console.error('Error in getCookie:', error);
-        return { success: false, error: error.message };
+        throw error;
     }
 }
 
@@ -294,7 +427,7 @@ async function getApiToken(loginToken) {
         return data.accessToken;
     } catch (error) {
         console.error('Error in getApiToken:', error);
-        return { success: false, error: error.message };
+        throw error;
     }
 }
 

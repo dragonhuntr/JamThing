@@ -1,7 +1,10 @@
 const axios = require('axios');
+const path = require('path');
+
+require('dotenv').config({ path: path.join(__dirname, '../../.env') })
 
 async function makeWeatherRequest() {
-    const url = `https://api.weather.gov/gridpoints/CLE/139,99/forecast/hourly`;
+    const url = process.env.WEATHER_ENDPOINT;
 
     try {
         const response = await axios.get(url, {
