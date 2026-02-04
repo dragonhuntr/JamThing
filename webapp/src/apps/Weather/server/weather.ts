@@ -1,7 +1,42 @@
+type WeatherMessagePayload =
+    | Record<string, never> // Empty object for: getForecastData
+    | { units?: string }; // Optional units parameter
+
+type WeatherRequestType = 'getForecastData';
+
+interface WeatherWebSocketRequest {
+    app: 'weather';
+    type: WeatherRequestType;
+    message: WeatherMessagePayload;
+}
+
+interface WeatherWebSocketResponse {
+    app: 'weather';
+    type: WeatherRequestType;
+    message: WeatherResponsePayload;
+}
+
+interface WeatherForecastPeriod {
+    startTime: string;
+    offset: number;
+    temperature: number;
+    temperatureUnit: string;
+    windSpeed: string;
+    probabilityOfPrecipitation: number;
+    relativeHumidity: number;
+    shortForecast: string;
+}
+
+type WeatherResponsePayload =
+    | { success: boolean; forecast: WeatherForecastPeriod[]; error?: string }
+    | { error: string };
+
+type WeatherCallback = (data: WeatherResponsePayload) => void;
 
 class WeatherHandler {
     private ws: WebSocket;
-    private callbacks: { [key: string]: Function[] };
+    private callbacks: { [key: string]: WeatherCallback[] };
+    private messageQueue: { type: WeatherRequestType, message: WeatherMessagePayload }[] = [];
 
     constructor() {
         this.ws = new WebSocket('ws://localhost:8891');
@@ -9,11 +44,13 @@ class WeatherHandler {
 
         this.ws.addEventListener('open', () => {
             console.log('Weather WebSocket connection established.');
+            // Clear queue on connection - don't spam old messages
+            this.messageQueue = [];
         });
 
         this.ws.addEventListener('message', (event) => {
             try {
-                const response = JSON.parse(event.data);
+                const response = JSON.parse(event.data) as WeatherWebSocketResponse;
                 console.log('Received weather response:', response);
 
                 if (response.type && this.callbacks[response.type]) {
@@ -40,11 +77,13 @@ class WeatherHandler {
 
         this.ws.addEventListener('open', () => {
             console.log('Weather WebSocket reconnected.');
+            // Clear queue on reconnection - don't spam old messages
+            this.messageQueue = [];
         });
 
         this.ws.addEventListener('message', (event) => {
             try {
-                const response = JSON.parse(event.data);
+                const response = JSON.parse(event.data) as WeatherWebSocketResponse;
                 console.log('Received weather response:', response);
 
                 if (response.type && this.callbacks[response.type]) {
@@ -66,37 +105,47 @@ class WeatherHandler {
         });
     }
 
-    private sendMessage(type: string, message: any = {}) {
-        const payload = {
+    private sendMessage(type: WeatherRequestType, message: WeatherMessagePayload = {}) {
+        // If websocket is not open, queue the message instead of retrying
+        if (this.ws.readyState !== WebSocket.OPEN) {
+            // Only queue if not already queued (avoid duplicates)
+            const alreadyQueued = this.messageQueue.some(
+                item => item.type === type && JSON.stringify(item.message) === JSON.stringify(message)
+            );
+            if (!alreadyQueued) {
+                this.messageQueue.push({ type, message });
+            }
+            return;
+        }
+
+        // Send immediately
+        const payload: WeatherWebSocketRequest = {
             app: 'weather',
             type: type,
             message: message
         };
-        const sendWhenReady = () => {
-            if (this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify(payload));
-            } else {
-                setTimeout(sendWhenReady, 100);
-            }
-        };
-        sendWhenReady();
+        this.ws.send(JSON.stringify(payload));
     }
 
-    private addCallback(type: string, callback: Function) {
+    private addCallback(type: WeatherRequestType, callback: WeatherCallback) {
         if (!this.callbacks[type]) {
             this.callbacks[type] = [];
         }
         this.callbacks[type].push(callback);
     }
 
-    async getForecastData(): Promise<any[]> {
+    async getForecastData(): Promise<WeatherForecastPeriod[]> {
         return new Promise((resolve) => {
-            this.addCallback('getForecastData', (weatherData: any) => {
-                resolve(weatherData.forecast);
+            this.addCallback('getForecastData', (weatherData) => {
+                if ('forecast' in weatherData && Array.isArray(weatherData.forecast)) {
+                    resolve(weatherData.forecast);
+                } else {
+                    resolve([]);
+                }
             });
             this.sendMessage('getForecastData');
         });
     }
-    }
+}
 
 export default WeatherHandler;

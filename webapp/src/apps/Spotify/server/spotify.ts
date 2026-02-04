@@ -1,10 +1,76 @@
+type SpotifyMessagePayload =
+    | Record<string, never> // Empty object for: play, pause, next, previous, getCurrentPlayback, getJamSession
+    | { isLiked: boolean } // likeSong
+    | { seconds: number } // fastForward, rewind
+    | { position: string | number } // seek
+    | { newVol: number } // volume
+    | { state: boolean } // repeat, shuffle
+    | { trackId: string }; // checkLiked
+
+type SpotifyRequestType =
+    | 'play'
+    | 'pause'
+    | 'likeSong'
+    | 'next'
+    | 'previous'
+    | 'fastForward'
+    | 'rewind'
+    | 'seek'
+    | 'volume'
+    | 'repeat'
+    | 'shuffle'
+    | 'getCurrentPlayback'
+    | 'checkLiked'
+    | 'getJamSession';
+
+interface SpotifyWebSocketRequest {
+    app: 'spotify';
+    type: SpotifyRequestType;
+    message: SpotifyMessagePayload;
+}
+
+interface SpotifyWebSocketResponse {
+    app: 'spotify';
+    type: SpotifyRequestType;
+    message: SpotifyResponsePayload;
+}
+
+type SpotifyResponsePayload =
+    | SpotifyPlaybackData
+    | { liked: boolean }
+    | string // QR code for getJamSession
+    | { success: boolean; error?: string };
+
+interface SpotifyPlaybackData {
+    item?: {
+        id: string;
+        name: string;
+        duration_ms: number;
+        album: {
+            name: string;
+            artists: Array<{ name: string }>;
+            images: Array<{ url: string; b64?: string }>;
+        };
+    };
+    progress_ms?: number;
+    is_playing?: boolean;
+    device?: {
+        volume_percent: number;
+    };
+    shuffle_state?: boolean;
+    success?: boolean;
+    error?: string;
+}
+
+type SpotifyCallback = (data: SpotifyResponsePayload) => void;
+
 class SpotifyHandler {
     private ws: WebSocket;
-    private callbacks: { [key: string]: Function[] };
+    private callbacks: { [key: string]: SpotifyCallback[] };
 
     // throttle requests to 5 per second to not spam spotify. change as needed.
     private requestCount = 0;
-    private requestQueue: { type: string, message: any }[] = [];
+    private requestQueue: { type: SpotifyRequestType, message: SpotifyMessagePayload }[] = [];
     private isThrottling = false;
 
     constructor() {
@@ -15,11 +81,15 @@ class SpotifyHandler {
 
         this.ws.addEventListener('open', () => {
             console.log('WebSocket connection established.');
+            // Clear queue on connection - don't spam old messages
+            this.requestQueue = [];
+            this.requestCount = 0;
+            this.isThrottling = false;
         });
 
         this.ws.addEventListener('message', (event) => {
             try {
-                const response = JSON.parse(event.data);
+                const response = JSON.parse(event.data) as SpotifyWebSocketResponse;
                 console.log('Received response:', response);
 
                 // Handle response
@@ -48,11 +118,15 @@ class SpotifyHandler {
 
         this.ws.addEventListener('open', () => {
             console.log('WebSocket reconnected.');
+            // Clear queue on reconnection - don't spam old messages
+            this.requestQueue = [];
+            this.requestCount = 0;
+            this.isThrottling = false;
         });
 
         this.ws.addEventListener('message', (event) => {
             try {
-                const response = JSON.parse(event.data);
+                const response = JSON.parse(event.data) as SpotifyWebSocketResponse;
                 console.log(response)
                 console.log('Received response:', response);
 
@@ -81,46 +155,76 @@ class SpotifyHandler {
      * @param message The message or arguments
      */
 
-    private sendMessage(type: string, message: any = {}) {
-        const payload = {
+    private sendMessage(type: SpotifyRequestType, message: SpotifyMessagePayload = {}) {
+        // If websocket is not open, queue the message instead of retrying
+        if (this.ws.readyState !== WebSocket.OPEN) {
+            // Only queue if not already queued (avoid duplicates)
+            const alreadyQueued = this.requestQueue.some(
+                item => item.type === type && JSON.stringify(item.message) === JSON.stringify(message)
+            );
+            if (!alreadyQueued) {
+                this.requestQueue.push({ type, message });
+            }
+            return;
+        }
+
+        // If throttling, queue the message
+        if (this.isThrottling) {
+            this.requestQueue.push({ type, message });
+            return;
+        }
+
+        // Send immediately
+        const payload: SpotifyWebSocketRequest = {
             app: 'spotify',
             type: type,
             message: message
         };
 
-        const sendWhenReady = () => {
-            if (this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify(payload));
-                this.requestCount++;
-                if (this.requestCount >= 5) {
-                    this.isThrottling = true;
-                    setTimeout(() => {
-                        this.requestCount = 0;
-                        this.isThrottling = false;
-                        this.processQueue();
-                    }, 1000);
-                }
-            } else {
-                setTimeout(sendWhenReady, 100);
-            }
-        };
-
-        if (this.isThrottling) {
-            this.requestQueue.push({ type, message });
-        } else {
-            sendWhenReady();
+        this.ws.send(JSON.stringify(payload));
+        this.requestCount++;
+        
+        if (this.requestCount >= 5) {
+            this.isThrottling = true;
+            setTimeout(() => {
+                this.requestCount = 0;
+                this.isThrottling = false;
+                this.processQueue();
+            }, 1000);
         }
     }
 
     private processQueue() {
-        while (!this.isThrottling && this.requestQueue.length > 0) {
+        // Only process queue when websocket is open and not throttling
+        if (this.ws.readyState !== WebSocket.OPEN || this.isThrottling) {
+            return;
+        }
+
+        while (this.requestQueue.length > 0 && !this.isThrottling) {
             const { type, message } = this.requestQueue.shift()!;
-            this.sendMessage(type, message);
+            const payload: SpotifyWebSocketRequest = {
+                app: 'spotify',
+                type: type,
+                message: message
+            };
+
+            this.ws.send(JSON.stringify(payload));
+            this.requestCount++;
+            
+            if (this.requestCount >= 5) {
+                this.isThrottling = true;
+                setTimeout(() => {
+                    this.requestCount = 0;
+                    this.isThrottling = false;
+                    this.processQueue();
+                }, 1000);
+                break;
+            }
         }
     }
 
     // Function to add a callback for a specific message type
-    private addCallback(type: string, callback: Function) {
+    private addCallback(type: SpotifyRequestType, callback: SpotifyCallback) {
         if (!this.callbacks[type]) {
             this.callbacks[type] = [];
         }
@@ -128,10 +232,10 @@ class SpotifyHandler {
     }
 
     // Function to request current playback data
-    async getCurrentPlayback(): Promise<any> {
+    async getCurrentPlayback(): Promise<SpotifyPlaybackData> {
         return new Promise((resolve) => {
-            this.addCallback('getCurrentPlayback', (data: any) => {
-                resolve(data);
+            this.addCallback('getCurrentPlayback', (data) => {
+                resolve(data as SpotifyPlaybackData);
             });
             this.sendMessage('getCurrentPlayback');
         });
@@ -140,17 +244,21 @@ class SpotifyHandler {
     // Function to check if a track is liked
     async checkLiked(trackId: string): Promise<boolean> {
         return new Promise((resolve) => {
-            this.addCallback('checkLiked', (data: { liked: boolean }) => {
-                resolve(data.liked);
+            this.addCallback('checkLiked', (data) => {
+                if (typeof data !== 'string' && data !== null && !Array.isArray(data) && 'liked' in data) {
+                    resolve((data as { liked: boolean }).liked);
+                } else {
+                    resolve(false);
+                }
             });
             this.sendMessage('checkLiked', { trackId });
         });
     }
 
-    async getJamSession(): Promise<any> {
+    async getJamSession(): Promise<string> {
         return new Promise((resolve) => {
-            this.addCallback('getJamSession', (data: any) => {
-                resolve(data);
+            this.addCallback('getJamSession', (data) => {
+                resolve(data as string);
             });
             this.sendMessage('getJamSession');
         });
