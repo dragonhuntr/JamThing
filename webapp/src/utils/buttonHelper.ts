@@ -31,8 +31,14 @@ class ButtonControls {
     }
 
     private wheelEventHandler = (event: WheelEvent) => {
-        const volumeDelta = event.deltaX > 0 ? 5 : -5;
-        this.notifyVolumeChange(volumeDelta);
+        // Support both horizontal (deltaX) and vertical (deltaY) scrolling
+        const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        
+        // Only trigger if there's actual scrolling
+        if (delta !== 0) {
+            const volumeDelta = delta > 0 ? 5 : -5;
+            this.notifyVolumeChange(volumeDelta);
+        }
     };
 
     private keyboardEventHandler = (event: KeyboardEvent) => {

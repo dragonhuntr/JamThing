@@ -5,6 +5,7 @@ import { PlaybackControls } from './components/PlaybackControls';
 import { ProgressBar } from './components/ProgressBar';
 import { findAlbumArtColor } from './utils/colorBg';
 import NowPlayingHandler from './server/nowplaying';
+import ButtonControl from '../../utils/buttonHelper';
 
 function NowPlayingApp() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,6 +38,24 @@ function NowPlayingApp() {
 
     return () => clearInterval(interval);
   }, [isInitialFetch]);
+
+  useEffect(() => {
+    const buttonControl = ButtonControl;
+
+    const handleVolumeChange = (volumeDelta: number) => {
+      if (volumeDelta > 0) {
+        nowPlayingHandlerRef.current?.increaseVolume();
+      } else {
+        nowPlayingHandlerRef.current?.decreaseVolume();
+      }
+    };
+
+    const removeVolumeListener = buttonControl.onVolumeChange(handleVolumeChange);
+
+    return () => {
+      removeVolumeListener();
+    };
+  }, []);
 
   const fetchCurrentPlayback = async () => {
     try {

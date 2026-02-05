@@ -13,6 +13,10 @@ async function handleNowPlayingRequest(type, message) {
             return await nextTrack();
         case 'previousTrack':
             return await previousTrack();
+        case 'increaseVolume':
+            return await increaseVolume();
+        case 'decreaseVolume':
+            return await decreaseVolume();
         default:
             return { error: 'Unknown request type' };
     }
@@ -75,6 +79,26 @@ async function previousTrack() {
         return { success: true };
     } catch (error) {
         console.error('Error in previousTrack:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function increaseVolume() {
+    try {
+        await child.execSync(`osascript -e "set volume output volume (output volume of (get volume settings) + 5)"`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error in increaseVolume:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function decreaseVolume() {
+    try {
+        await child.execSync(`osascript -e "set volume output volume (output volume of (get volume settings) - 5)"`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error in decreaseVolume:', error);
         return { success: false, error: error.message };
     }
 }

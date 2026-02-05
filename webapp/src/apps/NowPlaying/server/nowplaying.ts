@@ -5,7 +5,9 @@ type NowPlayingRequestType =
     | 'pauseTrack'
     | 'nextTrack'
     | 'previousTrack'
-    | 'getNowPlaying';
+    | 'getNowPlaying'
+    | 'increaseVolume'
+    | 'decreaseVolume';
 
 interface NowPlayingWebSocketRequest {
     app: 'nowplaying';
@@ -233,6 +235,14 @@ class NowPlayingHandler {
 
     async previous() {
         this.sendMessage('previousTrack', {});
+    }
+
+    async increaseVolume() {
+        this.sendMessage('increaseVolume', {});
+    }
+
+    async decreaseVolume() {
+        this.sendMessage('decreaseVolume', {});
     }
 }
 
