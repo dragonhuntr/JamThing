@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const express = require('express');
 const app = express();
 const path = require('path');
-const { handleSpotifyRequest } = require('./spotify/req');
+const { handleNowPlayingRequest } = require('./nowplaying/req');
 const { handleWeatherRequest } = require('./weather/req');
 
 app.use('/', express.static(path.resolve(__dirname, '../client')));
@@ -25,10 +25,10 @@ wsServer.on('connection', function (ws) {
             console.log('Received:', message);
 
             if (message.app && message.type && message.message !== undefined) {
-                if (message.app === 'spotify') {
-                    const response = await handleSpotifyRequest(message.type, message.message);
+                if (message.app === 'nowplaying') {
+                    const response = await handleNowPlayingRequest(message.type, message.message);
                     ws.send(JSON.stringify({
-                        app: 'spotify',
+                        app: 'nowplaying',
                         type: message.type,
                         message: response
                     }));

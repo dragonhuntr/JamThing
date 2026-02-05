@@ -1,22 +1,22 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
-import SpotifyApp from './apps/Spotify/SpotifyApp';
+import NowPlayingApp from './apps/NowPlaying/NowPlayingApp';
 import WeatherApp from './apps/Weather/WeatherApp';
 import ButtonControls from './utils/buttonHelper';
 
 function App() {
-  const [currentView, setCurrentView] = useState('spotify');
+  const [currentView, setCurrentView] = useState('nowplaying');
 
   useEffect(() => {
     const unregister = ButtonControls.onToggleView(() => {
       setCurrentView(prevView => {
         switch (prevView) {
-          case 'spotify':
+          case 'nowplaying':
             return 'weather';
           case 'weather':
-            return 'spotify';
+            return 'nowplaying';
           default:
-            return 'spotify';
+            return 'nowplaying';
         }
       });
     });
@@ -26,8 +26,8 @@ function App() {
   return (
     <Router>
       <div>
-        <div style={{ display: currentView === 'spotify' ? 'block' : 'none' }}>
-          <SpotifyApp />
+        <div style={{ display: currentView === 'nowplaying' ? 'block' : 'none' }}>
+          <NowPlayingApp />
         </div>
         <div style={{ display: currentView === 'weather' ? 'block' : 'none' }}>
           <WeatherApp />
