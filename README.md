@@ -2,6 +2,8 @@
 
 My take on replicating the original Spotify CarThing UI, but better. Powered with Spotify's Private API ([Disclaimer](https://github.com/dragonhuntr/JamThing?tab=readme-ov-file#disclaimer))
 
+# NOTE: SPOTIFY REMOVED PASSWORD AUTHENTICATION! That means this repo no longer works :(
+
 ## Features
 
 - Minimal UI similar to the CarThing
