@@ -44,29 +44,51 @@ interface NowPlayingData {
 type NowPlayingCallback = (data: NowPlayingResponsePayload) => void;
 
 class NowPlayingHandler {
-    private ws: WebSocket;
+    private ws: WebSocket | null = null;
     private callbacks: { [key: string]: NowPlayingCallback[] };
+    private reconnectTimeout: NodeJS.Timeout | null = null;
+    private isReconnecting = false;
 
     // throttle requests to 5 per second
     private requestCount = 0;
     private requestQueue: { type: NowPlayingRequestType, message: NowPlayingMessagePayload }[] = [];
     private isThrottling = false;
 
+    // Store event handlers so we can remove them
+    private openHandler: (() => void) | null = null;
+    private messageHandler: ((event: MessageEvent) => void) | null = null;
+    private errorHandler: ((err: Event) => void) | null = null;
+    private closeHandler: (() => void) | null = null;
+
     constructor() {
-        // Initialize WebSocket connection using the native WebSocket object
-        this.ws = new WebSocket('ws://localhost:8891');
-
         this.callbacks = {};
+        this.connect();
+    }
 
-        this.ws.addEventListener('open', () => {
+    private connect() {
+        // Clean up old connection if it exists
+        this.cleanup();
+
+        // Create new WebSocket connection
+        this.ws = new WebSocket('ws://localhost:8891');
+        this.setupEventHandlers();
+    }
+
+    private setupEventHandlers() {
+        if (!this.ws) return;
+
+        this.openHandler = () => {
             console.log('WebSocket connection established.');
             // Clear queue on connection - don't spam old messages
             this.requestQueue = [];
             this.requestCount = 0;
             this.isThrottling = false;
-        });
+            this.isReconnecting = false;
+            // Process any queued messages
+            this.processQueue();
+        };
 
-        this.ws.addEventListener('message', (event) => {
+        this.messageHandler = (event: MessageEvent) => {
             try {
                 const response = JSON.parse(event.data) as NowPlayingWebSocketResponse;
                 console.log('Received response:', response);
@@ -80,51 +102,71 @@ class NowPlayingHandler {
             } catch (error) {
                 console.error('Error parsing message:', error);
             }
-        });
+        };
 
-        this.ws.addEventListener('error', (err) => {
+        this.errorHandler = (err: Event) => {
             console.error('WebSocket error:', err);
-        });
+        };
 
-        this.ws.addEventListener('close', () => {
-            console.log('WebSocket connection closed. Attempting to reconnect...');
-            setTimeout(() => this.reconnect(), 5000);
-        });
+        this.closeHandler = () => {
+            console.log('WebSocket connection closed.');
+            this.cleanup();
+            // Only reconnect if not already reconnecting
+            if (!this.isReconnecting) {
+                this.isReconnecting = true;
+                this.reconnectTimeout = setTimeout(() => {
+                    this.reconnectTimeout = null;
+                    this.connect();
+                }, 5000);
+            }
+        };
+
+        this.ws.addEventListener('open', this.openHandler);
+        this.ws.addEventListener('message', this.messageHandler);
+        this.ws.addEventListener('error', this.errorHandler);
+        this.ws.addEventListener('close', this.closeHandler);
+    }
+
+    private cleanup() {
+        // Clear reconnection timeout
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        // Remove event listeners and close old WebSocket
+        if (this.ws) {
+            if (this.openHandler) {
+                this.ws.removeEventListener('open', this.openHandler);
+            }
+            if (this.messageHandler) {
+                this.ws.removeEventListener('message', this.messageHandler);
+            }
+            if (this.errorHandler) {
+                this.ws.removeEventListener('error', this.errorHandler);
+            }
+            if (this.closeHandler) {
+                this.ws.removeEventListener('close', this.closeHandler);
+            }
+
+            // Close the WebSocket if it's still open
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                this.ws.close();
+            }
+
+            this.ws = null;
+        }
+
+        // Clear handler references
+        this.openHandler = null;
+        this.messageHandler = null;
+        this.errorHandler = null;
+        this.closeHandler = null;
     }
 
     private reconnect() {
-        this.ws = new WebSocket('ws://localhost:8891');
-
-        this.ws.addEventListener('open', () => {
-            console.log('WebSocket reconnected.');
-            // Clear queue on reconnection - don't spam old messages
-            this.requestQueue = [];
-            this.requestCount = 0;
-            this.isThrottling = false;
-        });
-
-        this.ws.addEventListener('message', (event) => {
-            try {
-                const response = JSON.parse(event.data) as NowPlayingWebSocketResponse;
-                console.log('Received response:', response);
-
-                if (response.type && this.callbacks[response.type]) {
-                    this.callbacks[response.type].forEach(callback => callback(response.message));
-                    this.callbacks[response.type] = [];
-                }
-            } catch (error) {
-                console.error('Error parsing message:', error);
-            }
-        });
-
-        this.ws.addEventListener('error', (err) => {
-            console.error('WebSocket error:', err);
-        });
-
-        this.ws.addEventListener('close', () => {
-            console.log('WebSocket connection closed. Attempting to reconnect...');
-            setTimeout(() => this.reconnect(), 5000);
-        });
+        // reconnect() is now just an alias for connect() since cleanup handles everything
+        this.connect();
     }
 
     /**
@@ -135,7 +177,7 @@ class NowPlayingHandler {
 
     private sendMessage(type: NowPlayingRequestType, message: NowPlayingMessagePayload = {}) {
         // If websocket is not open, queue the message instead of retrying
-        if (this.ws.readyState !== WebSocket.OPEN) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             // Only queue if not already queued (avoid duplicates)
             const alreadyQueued = this.requestQueue.some(
                 item => item.type === type && JSON.stringify(item.message) === JSON.stringify(message)
@@ -174,7 +216,7 @@ class NowPlayingHandler {
 
     private processQueue() {
         // Only process queue when websocket is open and not throttling
-        if (this.ws.readyState !== WebSocket.OPEN || this.isThrottling) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.isThrottling) {
             return;
         }
 

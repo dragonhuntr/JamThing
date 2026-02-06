@@ -34,21 +34,43 @@ type WeatherResponsePayload =
 type WeatherCallback = (data: WeatherResponsePayload) => void;
 
 class WeatherHandler {
-    private ws: WebSocket;
+    private ws: WebSocket | null = null;
     private callbacks: { [key: string]: WeatherCallback[] };
     private messageQueue: { type: WeatherRequestType, message: WeatherMessagePayload }[] = [];
+    private reconnectTimeout: NodeJS.Timeout | null = null;
+    private isReconnecting = false;
+
+    // Store event handlers so we can remove them
+    private openHandler: (() => void) | null = null;
+    private messageHandler: ((event: MessageEvent) => void) | null = null;
+    private errorHandler: ((err: Event) => void) | null = null;
+    private closeHandler: (() => void) | null = null;
 
     constructor() {
-        this.ws = new WebSocket('ws://localhost:8891');
         this.callbacks = {};
+        this.connect();
+    }
 
-        this.ws.addEventListener('open', () => {
+    private connect() {
+        // Clean up old connection if it exists
+        this.cleanup();
+
+        // Create new WebSocket connection
+        this.ws = new WebSocket('ws://localhost:8891');
+        this.setupEventHandlers();
+    }
+
+    private setupEventHandlers() {
+        if (!this.ws) return;
+
+        this.openHandler = () => {
             console.log('Weather WebSocket connection established.');
             // Clear queue on connection - don't spam old messages
             this.messageQueue = [];
-        });
+            this.isReconnecting = false;
+        };
 
-        this.ws.addEventListener('message', (event) => {
+        this.messageHandler = (event: MessageEvent) => {
             try {
                 const response = JSON.parse(event.data) as WeatherWebSocketResponse;
                 console.log('Received weather response:', response);
@@ -60,54 +82,76 @@ class WeatherHandler {
             } catch (error) {
                 console.error('Error parsing weather message:', error);
             }
-        });
+        };
 
-        this.ws.addEventListener('error', (err) => {
+        this.errorHandler = (err: Event) => {
             console.error('Weather WebSocket error:', err);
-        });
+        };
 
-        this.ws.addEventListener('close', () => {
-            console.log('Weather WebSocket connection closed. Attempting to reconnect...');
-            setTimeout(() => this.reconnect(), 5000);
-        });
+        this.closeHandler = () => {
+            console.log('Weather WebSocket connection closed.');
+            this.cleanup();
+            // Only reconnect if not already reconnecting
+            if (!this.isReconnecting) {
+                this.isReconnecting = true;
+                this.reconnectTimeout = setTimeout(() => {
+                    this.reconnectTimeout = null;
+                    this.connect();
+                }, 5000);
+            }
+        };
+
+        this.ws.addEventListener('open', this.openHandler);
+        this.ws.addEventListener('message', this.messageHandler);
+        this.ws.addEventListener('error', this.errorHandler);
+        this.ws.addEventListener('close', this.closeHandler);
+    }
+
+    private cleanup() {
+        // Clear reconnection timeout
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        // Remove event listeners and close old WebSocket
+        if (this.ws) {
+            if (this.openHandler) {
+                this.ws.removeEventListener('open', this.openHandler);
+            }
+            if (this.messageHandler) {
+                this.ws.removeEventListener('message', this.messageHandler);
+            }
+            if (this.errorHandler) {
+                this.ws.removeEventListener('error', this.errorHandler);
+            }
+            if (this.closeHandler) {
+                this.ws.removeEventListener('close', this.closeHandler);
+            }
+
+            // Close the WebSocket if it's still open
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                this.ws.close();
+            }
+
+            this.ws = null;
+        }
+
+        // Clear handler references
+        this.openHandler = null;
+        this.messageHandler = null;
+        this.errorHandler = null;
+        this.closeHandler = null;
     }
 
     private reconnect() {
-        this.ws = new WebSocket('ws://localhost:8891');
-
-        this.ws.addEventListener('open', () => {
-            console.log('Weather WebSocket reconnected.');
-            // Clear queue on reconnection - don't spam old messages
-            this.messageQueue = [];
-        });
-
-        this.ws.addEventListener('message', (event) => {
-            try {
-                const response = JSON.parse(event.data) as WeatherWebSocketResponse;
-                console.log('Received weather response:', response);
-
-                if (response.type && this.callbacks[response.type]) {
-                    this.callbacks[response.type].forEach(callback => callback(response.message));
-                    this.callbacks[response.type] = [];
-                }
-            } catch (error) {
-                console.error('Error parsing weather message:', error);
-            }
-        });
-
-        this.ws.addEventListener('error', (err) => {
-            console.error('Weather WebSocket error:', err);
-        });
-
-        this.ws.addEventListener('close', () => {
-            console.log('Weather WebSocket connection closed. Attempting to reconnect...');
-            setTimeout(() => this.reconnect(), 5000);
-        });
+        // reconnect() is now just an alias for connect() since cleanup handles everything
+        this.connect();
     }
 
     private sendMessage(type: WeatherRequestType, message: WeatherMessagePayload = {}) {
         // If websocket is not open, queue the message instead of retrying
-        if (this.ws.readyState !== WebSocket.OPEN) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             // Only queue if not already queued (avoid duplicates)
             const alreadyQueued = this.messageQueue.some(
                 item => item.type === type && JSON.stringify(item.message) === JSON.stringify(message)
